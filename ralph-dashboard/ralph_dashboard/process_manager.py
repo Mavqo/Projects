@@ -114,7 +114,13 @@ class ManagedProcess:
             raise
 
     def _write_auto_responses(self) -> None:
-        """Write pre-canned responses to stdin for interactive prompts."""
+        """Write pre-canned responses to stdin for interactive prompts.
+
+        After writing the initial responses we close stdin so that any
+        worker sub-processes that ralph-tui spawns will immediately
+        receive EOF instead of blocking on the open pipe (which causes
+        them to timeout after ~2 s and skip actual work).
+        """
         import time
         stdin = self.process.stdin
         if not stdin:
@@ -128,8 +134,16 @@ class ManagedProcess:
                 logger.debug("Auto-responding '%s' to %s", response.strip(), self.project_name)
                 stdin.write(response)
                 stdin.flush()
+            # Give ralph-tui a moment to consume the last response before
+            # we close stdin, then close it so workers get EOF immediately.
+            time.sleep(1.0)
         except (BrokenPipeError, OSError) as exc:
             logger.debug("Auto-respond pipe closed: %s", exc)
+        finally:
+            try:
+                stdin.close()
+            except (BrokenPipeError, OSError):
+                pass
 
     def _read_stream(self, stream, stream_name: str) -> None:
         """Read lines from a stream and forward to callback."""
