@@ -33,6 +33,7 @@ dependencies = [
     "psutil>=5.9.0",
     "pydantic>=2.5.0",
     "websockets>=12.0",
+    "httpx>=0.25.0",
 ]
 
 [project.optional-dependencies]

@@ -57,6 +57,22 @@ class ApiClient {
         });
     }
 
+    // Ollama
+    async getOllamaStatus() {
+        return this._fetch('/ollama/status');
+    }
+
+    async getOllamaModels() {
+        return this._fetch('/ollama/models');
+    }
+
+    async ollamaChat(model, messages) {
+        return this._fetch('/ollama/chat', {
+            method: 'POST',
+            body: JSON.stringify({ model, messages }),
+        });
+    }
+
     // Projects
     async listProjects() {
         return this._fetch('/projects');
@@ -64,6 +80,13 @@ class ApiClient {
 
     async getProject(name) {
         return this._fetch(`/projects/${encodeURIComponent(name)}`);
+    }
+
+    async createFromPrompt(data) {
+        return this._fetch('/projects/create-from-prompt', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
     }
 
     async launchProject(name, options = {}) {

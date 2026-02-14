@@ -1,8 +1,10 @@
-"""System performance monitoring using psutil and optional GPU libraries."""
+"""System performance monitoring using psutil and nvidia-smi."""
 
 from __future__ import annotations
 
 import logging
+import shutil
+import subprocess
 import time
 from collections import deque
 from datetime import datetime
@@ -40,19 +42,20 @@ class SystemMonitor:
         self._try_init_gpu()
 
     def _try_init_gpu(self) -> None:
-        """Try to initialize GPU monitoring."""
-        try:
-            import GPUtil  # noqa: F811
-            gpus = GPUtil.getGPUs()
-            if gpus:
-                self._gpu_available = True
-                logger.info("GPU monitoring enabled: %s", gpus[0].name)
-            else:
-                logger.info("No GPU detected, GPU monitoring disabled")
-        except ImportError:
-            logger.info("GPUtil not installed, GPU monitoring disabled")
-        except Exception as exc:
-            logger.warning("GPU init failed: %s", exc)
+        """Try to initialize GPU monitoring via nvidia-smi."""
+        if shutil.which("nvidia-smi"):
+            try:
+                result = subprocess.run(
+                    ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+                    capture_output=True, text=True, timeout=5,
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    self._gpu_available = True
+                    logger.info("GPU monitoring enabled (nvidia-smi): %s", result.stdout.strip())
+                    return
+            except Exception as exc:
+                logger.warning("nvidia-smi failed: %s", exc)
+        logger.info("No NVIDIA GPU detected via nvidia-smi, GPU monitoring disabled")
 
     def collect_cpu(self) -> CpuMetrics:
         """Collect CPU metrics."""
@@ -98,24 +101,36 @@ class SystemMonitor:
         )
 
     def collect_gpu(self) -> GpuMetrics:
-        """Collect GPU metrics if available."""
+        """Collect GPU metrics via nvidia-smi (no GPUtil dependency)."""
         if not self._gpu_available:
             return GpuMetrics(available=False)
         try:
-            import GPUtil
-            gpus = GPUtil.getGPUs()
-            if not gpus:
+            result = subprocess.run(
+                [
+                    "nvidia-smi",
+                    "--query-gpu=name,utilization.gpu,memory.total,memory.used,temperature.gpu",
+                    "--format=csv,noheader,nounits",
+                ],
+                capture_output=True, text=True, timeout=5,
+            )
+            if result.returncode != 0:
                 return GpuMetrics(available=False)
-            gpu = gpus[0]
+            parts = [p.strip() for p in result.stdout.strip().split(",")]
+            if len(parts) < 5:
+                return GpuMetrics(available=False)
+            name = parts[0]
+            load = float(parts[1]) if parts[1] not in ("[N/A]", "") else 0.0
+            mem_total = float(parts[2]) if parts[2] not in ("[N/A]", "") else 0.0
+            mem_used = float(parts[3]) if parts[3] not in ("[N/A]", "") else 0.0
+            temp = float(parts[4]) if parts[4] not in ("[N/A]", "") else None
+            mem_pct = (mem_used / mem_total * 100) if mem_total > 0 else 0.0
             return GpuMetrics(
-                name=gpu.name,
-                load_percent=round(gpu.load * 100, 1),
-                memory_total_mb=round(gpu.memoryTotal, 1),
-                memory_used_mb=round(gpu.memoryUsed, 1),
-                memory_percent=round(
-                    (gpu.memoryUsed / gpu.memoryTotal * 100) if gpu.memoryTotal > 0 else 0, 1
-                ),
-                temperature_c=gpu.temperature,
+                name=name,
+                load_percent=round(load, 1),
+                memory_total_mb=round(mem_total, 1),
+                memory_used_mb=round(mem_used, 1),
+                memory_percent=round(mem_pct, 1),
+                temperature_c=temp,
                 available=True,
             )
         except Exception as exc:

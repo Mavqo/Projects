@@ -19,8 +19,10 @@ from .config import get_projects_dir, load_config, save_config
 from .log_manager import ProjectLogManager
 from .models import (
     ApiResponse,
+    ChatRequest,
     DashboardConfig,
     LaunchOptions,
+    ProjectFromPrompt,
     ProjectStatus,
     TaskCreate,
     TaskUpdate,
@@ -35,9 +37,12 @@ from .ralph_integration import (
     load_project_config,
     save_project_config,
 )
+from .ollama_client import OllamaClient
 from .system_monitor import SystemMonitor
 
 logger = logging.getLogger(__name__)
+
+ollama = OllamaClient()
 
 # Global state
 config = load_config()
@@ -466,6 +471,165 @@ async def clear_logs(name: str):
     return ApiResponse(message=f"Log buffer cleared for '{name}'")
 
 
+# --- Ollama / Chat Endpoints ---
+
+@app.get("/api/ollama/status")
+async def ollama_status():
+    """Check if Ollama is running and reachable."""
+    available = await ollama.is_available()
+    return {"available": available, "url": ollama.base_url}
+
+
+@app.get("/api/ollama/models")
+async def ollama_models():
+    """List locally available Ollama models."""
+    models = await ollama.list_models()
+    return [
+        {
+            "name": m.get("name", ""),
+            "size": m.get("size", 0),
+            "modified_at": m.get("modified_at", ""),
+        }
+        for m in models
+    ]
+
+
+@app.post("/api/ollama/chat")
+async def ollama_chat(req: ChatRequest):
+    """Non-streaming chat with an Ollama model."""
+    messages = [{"role": m.role, "content": m.content} for m in req.messages]
+    reply = await ollama.chat(req.model, messages)
+    return {"role": "assistant", "content": reply, "model": req.model}
+
+
+@app.post("/api/projects/create-from-prompt")
+async def create_project_from_prompt(req: ProjectFromPrompt):
+    """Create a new project from a user prompt.
+
+    1. Creates the project directory with .ralph-tui config.
+    2. Uses Ollama to decompose the prompt into tasks.
+    3. Saves tasks.json.
+    4. Optionally launches Ralph-TUI.
+    """
+    import re as _re
+
+    projects_dir = get_projects_dir(config)
+    project_path = projects_dir / req.name
+    if project_path.exists():
+        raise HTTPException(400, f"Project '{req.name}' already exists")
+
+    # 1. Create directory structure
+    project_path.mkdir(parents=True, exist_ok=True)
+    ralph_dir = project_path / ".ralph-tui"
+    ralph_dir.mkdir(exist_ok=True)
+
+    # Write config.toml
+    config_toml = f"""[agent]
+type = "opencode"
+model = "{req.model}"
+
+[issue_tracker]
+type = "json"
+
+[execution]
+max_iterations = {req.max_iterations}
+headless = true
+"""
+    (ralph_dir / "config.toml").write_text(config_toml, encoding="utf-8")
+
+    # 2. Use Ollama to decompose prompt into tasks
+    tasks_list = []
+    ollama_ok = await ollama.is_available()
+    if ollama_ok:
+        system_msg = (
+            "You are a project planner. Given a user's project description, "
+            "break it down into concrete, actionable development tasks. "
+            "Return ONLY a JSON array of objects with 'id' (integer), "
+            "'title' (short), 'description' (detailed), 'priority' "
+            "(high/medium/low), and 'dependencies' (array of task ids). "
+            "Return 4-10 tasks. Return ONLY valid JSON, no markdown."
+        )
+        raw = await ollama.chat(req.model, [
+            {"role": "system", "content": system_msg},
+            {"role": "user", "content": req.prompt},
+        ])
+        # Try to parse JSON from response
+        try:
+            # Extract JSON array from response (may have markdown fences)
+            json_match = _re.search(r"\[.*\]", raw, _re.DOTALL)
+            if json_match:
+                tasks_list = json.loads(json_match.group())
+        except (json.JSONDecodeError, AttributeError):
+            logger.warning("Failed to parse Ollama task response, using default task")
+
+    if not tasks_list:
+        tasks_list = [
+            {
+                "id": 1,
+                "title": "Implement project",
+                "description": req.prompt,
+                "status": "pending",
+                "priority": "high",
+                "dependencies": [],
+            }
+        ]
+
+    # Ensure all tasks have required fields
+    for t in tasks_list:
+        t.setdefault("status", "pending")
+        t.setdefault("priority", "medium")
+        t.setdefault("dependencies", [])
+        t.setdefault("description", "")
+
+    # 3. Save tasks.json
+    tasks_dir = project_path / "tasks"
+    tasks_dir.mkdir(exist_ok=True)
+    tasks_data = {"tasks": tasks_list}
+    (tasks_dir / "tasks.json").write_text(
+        json.dumps(tasks_data, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+
+    # 4. Save prd.json
+    prd_data = {
+        "name": req.name,
+        "description": req.prompt,
+        "model": req.model,
+        "tasks": tasks_list,
+    }
+    (project_path / "prd.json").write_text(
+        json.dumps(prd_data, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+
+    # 5. Launch Ralph-TUI if available
+    launched = False
+    pid = None
+    if is_ralph_tui_available():
+        cmd = build_run_command(
+            project_name=req.name,
+            max_iterations=req.max_iterations,
+            headless=True,
+            model=req.model,
+        )
+        proc = process_mgr.launch(req.name, cmd, project_path)
+        launched = True
+        pid = proc.pid
+        for log_file in find_log_files(project_path):
+            log_mgr.watch_file(req.name, log_file)
+
+    return ApiResponse(
+        message=f"Project '{req.name}' created with {len(tasks_list)} tasks"
+                + (f" and launched (PID: {pid})" if launched else ""),
+        data={
+            "name": req.name,
+            "path": str(project_path),
+            "task_count": len(tasks_list),
+            "tasks": tasks_list,
+            "launched": launched,
+            "pid": pid,
+        },
+    )
+
+
 # --- WebSocket Endpoints ---
 
 @app.websocket("/ws/metrics")
@@ -519,3 +683,38 @@ async def ws_logs(websocket: WebSocket, project: str):
         pass
     finally:
         clients.discard(websocket)
+
+
+@app.websocket("/ws/chat")
+async def ws_chat(websocket: WebSocket):
+    """WebSocket: streaming chat with Ollama model.
+
+    Client sends: {"model": "...", "messages": [...]}
+    Server streams: {"type": "chat_token", "content": "..."} per token,
+                    then {"type": "chat_done"} when complete.
+    """
+    await websocket.accept()
+    try:
+        while True:
+            raw = await websocket.receive_text()
+            data = json.loads(raw)
+            model = data.get("model", "qwen2.5-coder:7b")
+            messages = data.get("messages", [])
+
+            async for token in ollama.chat_stream(model, messages):
+                await websocket.send_text(json.dumps({
+                    "type": "chat_token",
+                    "content": token,
+                }))
+            await websocket.send_text(json.dumps({"type": "chat_done"}))
+    except WebSocketDisconnect:
+        pass
+    except Exception as exc:
+        logger.debug("Chat WebSocket error: %s", exc)
+        try:
+            await websocket.send_text(json.dumps({
+                "type": "chat_error",
+                "error": str(exc),
+            }))
+        except Exception:
+            pass

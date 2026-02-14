@@ -1,13 +1,10 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="it" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ralph Dashboard</title>
     <link rel="stylesheet" href="/static/css/style.css">
-    <style>
-        .hidden { display: none !important; }
-    </style>
 </head>
 <body>
     <div class="app-layout">
@@ -21,133 +18,204 @@
                 </div>
             </div>
             <div class="header-right">
+                <span id="ollama-status" class="header-ollama">Ollama: checking...</span>
                 <button class="btn btn-icon tooltip" id="theme-toggle" data-tooltip="Toggle theme">&#9790;</button>
             </div>
         </header>
 
-        <!-- Left Sidebar: Projects -->
+        <!-- Left Sidebar: Navigation -->
         <aside class="sidebar">
-            <div class="sidebar-section">
-                <div class="sidebar-section-title">Projects</div>
+            <!-- Mode selector -->
+            <div class="sidebar-mode-selector">
+                <button class="mode-btn active" data-mode="chat" onclick="App.switchMode('chat')">
+                    <span class="mode-icon">&#128172;</span> Chat
+                </button>
+                <button class="mode-btn" data-mode="ralph" onclick="App.switchMode('ralph')">
+                    <span class="mode-icon">&#9881;</span> Ralph
+                </button>
             </div>
-            <div class="project-list" id="project-list">
-                <div class="empty-state">
-                    <div class="empty-state-text" style="font-size: 12px;">Loading projects...</div>
+
+            <!-- Chat mode sidebar -->
+            <div class="sidebar-panel active" id="sidebar-chat">
+                <div class="sidebar-section">
+                    <div class="sidebar-section-title">Modello</div>
+                    <select class="form-input" id="chat-model-select" style="font-size: 12px;">
+                        <option value="qwen2.5-coder:7b">qwen2.5-coder:7b</option>
+                    </select>
+                </div>
+                <div class="sidebar-section">
+                    <div class="sidebar-section-title">Conversazioni</div>
+                </div>
+                <div class="chat-history-list" id="chat-history-list">
+                    <div class="chat-history-item active" onclick="Chat.newConversation()">
+                        + Nuova chat
+                    </div>
                 </div>
             </div>
-            <div class="sidebar-actions">
-                <button class="btn btn-primary" onclick="Projects.launch()" title="Launch selected project">
-                    &#9654; Launch
-                </button>
-                <div style="display: flex; gap: 4px; margin-top: 4px;">
-                    <button class="btn btn-sm" onclick="Projects.pause()" title="Pause" style="flex: 1;">&#10074;&#10074; Pause</button>
-                    <button class="btn btn-sm btn-success" onclick="Projects.resume()" title="Resume" style="flex: 1;">&#9654; Resume</button>
-                    <button class="btn btn-sm btn-danger" onclick="Projects.stop()" title="Stop" style="flex: 1;">&#9632; Stop</button>
+
+            <!-- Ralph mode sidebar -->
+            <div class="sidebar-panel" id="sidebar-ralph">
+                <div class="sidebar-section">
+                    <div class="sidebar-section-title">Progetti</div>
+                </div>
+                <div class="project-list" id="project-list">
+                    <div class="empty-state">
+                        <div class="empty-state-text" style="font-size: 12px;">Caricamento...</div>
+                    </div>
+                </div>
+                <div class="sidebar-actions">
+                    <button class="btn btn-primary" onclick="App.showModal('new-project-modal')" style="width: 100%; justify-content: center;">
+                        + Nuovo Progetto
+                    </button>
                 </div>
             </div>
         </aside>
 
         <!-- Main Content -->
         <main class="main-content">
-            <!-- Tab Bar -->
-            <div class="tab-bar">
-                <div class="tab active" data-tab="tasks">Tasks</div>
-                <div class="tab" data-tab="logs">Logs</div>
-                <div class="tab" data-tab="config">Config</div>
-                <div style="flex: 1;"></div>
-                <span id="main-project-name" style="font-size: 12px; color: var(--text-muted); padding-right: 12px;">
-                    Select a project
-                </span>
-            </div>
-
-            <div class="tab-content">
-                <!-- Tasks Panel -->
-                <div class="tab-panel active" id="panel-tasks">
-                    <div class="task-toolbar">
-                        <input type="text" class="search-input" placeholder="Search tasks..."
-                               oninput="Tasks.filterBySearch(this.value)">
-                        <select class="select-input" onchange="Tasks.filterByStatus(this.value)">
-                            <option value="">All statuses</option>
-                            <option value="pending">Pending</option>
-                            <option value="in-progress">In Progress</option>
-                            <option value="completed">Completed</option>
-                            <option value="blocked">Blocked</option>
-                            <option value="cancelled">Cancelled</option>
-                            <option value="deferred">Deferred</option>
-                        </select>
-                        <select class="select-input" onchange="Tasks.filterByPriority(this.value)">
-                            <option value="">All priorities</option>
-                            <option value="high">High</option>
-                            <option value="medium">Medium</option>
-                            <option value="low">Low</option>
-                        </select>
-                        <span id="tasks-count" style="font-size: 12px; color: var(--text-muted);"></span>
-                        <div style="flex: 1;"></div>
-                        <button class="btn btn-sm" onclick="Tasks.showDependencyTree()">&#128722; Dependency Tree</button>
-                        <button class="btn btn-sm btn-primary" onclick="Tasks.showAddModal()">+ Add Task</button>
-                    </div>
-                    <div style="flex: 1; overflow: auto;">
-                        <table class="task-table">
-                            <thead>
-                                <tr>
-                                    <th style="width: 60px;">ID</th>
-                                    <th>Title</th>
-                                    <th style="width: 110px;">Status</th>
-                                    <th style="width: 90px;">Priority</th>
-                                    <th style="width: 140px;">Dependencies</th>
-                                    <th style="width: 100px;">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="tasks-body">
-                                <tr><td colspan="6" style="text-align: center; padding: 40px; color: var(--text-muted);">
-                                    Select a project to view tasks
-                                </td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- Logs Panel -->
-                <div class="tab-panel" id="panel-logs">
-                    <div class="log-toolbar">
-                        <input type="text" class="search-input" id="log-search" placeholder="Search logs..."
-                               onkeydown="if(event.key==='Enter') Logs.search()">
-                        <button class="btn btn-sm" onclick="Logs.search()">Search</button>
-                        <button class="btn btn-sm btn-primary" id="log-autoscroll-btn" onclick="Logs.toggleAutoScroll()">
-                            &#8615; Auto-scroll ON
-                        </button>
-                        <button class="btn btn-sm" onclick="Logs.clear()">Clear</button>
-                        <div style="flex: 1;"></div>
-                        <span id="log-status" style="font-size: 12px; color: var(--text-muted);"></span>
-                        <button class="btn btn-sm" onclick="Logs.exportLogs('txt')">Export TXT</button>
-                        <button class="btn btn-sm" onclick="Logs.exportLogs('json')">Export JSON</button>
-                    </div>
-                    <div class="log-container">
-                        <div class="log-output" id="log-output">
-                            <div style="padding: 40px; text-align: center; color: var(--text-muted);">
-                                Select a project and switch to this tab to view logs
+            <!-- Chat Mode -->
+            <div class="main-panel active" id="main-chat">
+                <div class="chat-container">
+                    <div class="chat-messages" id="chat-messages">
+                        <div class="chat-welcome">
+                            <div class="chat-welcome-title">Chat con il tuo modello locale</div>
+                            <div class="chat-welcome-sub">
+                                Scrivi un messaggio per chattare direttamente con Qwen o un altro modello Ollama installato.
                             </div>
                         </div>
                     </div>
+                    <div class="chat-input-area">
+                        <div class="chat-input-wrapper">
+                            <textarea class="chat-input" id="chat-input" rows="1"
+                                      placeholder="Scrivi un messaggio..."
+                                      onkeydown="Chat.handleKey(event)"
+                                      oninput="Chat.autoResize(this)"></textarea>
+                            <button class="chat-send-btn" id="chat-send-btn" onclick="Chat.send()">
+                                &#9654;
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Ralph Mode -->
+            <div class="main-panel" id="main-ralph">
+                <!-- No project selected state -->
+                <div id="ralph-empty" class="ralph-empty-state">
+                    <div class="chat-welcome">
+                        <div class="chat-welcome-title">Ralph-TUI Projects</div>
+                        <div class="chat-welcome-sub">
+                            Seleziona un progetto dalla sidebar o creane uno nuovo.<br>
+                            Scrivi cosa vuoi costruire e Ralph lo scompone in task automaticamente.
+                        </div>
+                    </div>
                 </div>
 
-                <!-- Config Panel -->
-                <div class="tab-panel" id="panel-config">
-                    <div style="margin-bottom: 12px;">
-                        <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">Parsed Configuration</div>
-                        <div id="config-info" style="padding: 12px; background: var(--bg-tertiary); border-radius: var(--radius); border: 1px solid var(--border);">
-                            <span style="color: var(--text-muted);">Select a project to view its configuration</span>
+                <!-- Project detail view -->
+                <div id="ralph-detail" class="ralph-detail hidden">
+                    <!-- Project header -->
+                    <div class="project-header">
+                        <div class="project-header-info">
+                            <h2 id="project-detail-name">-</h2>
+                            <span class="badge" id="project-detail-status">idle</span>
+                            <a href="#" id="project-folder-link" class="folder-link" title="Apri cartella progetto">
+                                &#128193; Apri cartella
+                            </a>
+                        </div>
+                        <div class="project-header-actions">
+                            <button class="btn btn-sm btn-primary" onclick="Projects.launch()">&#9654; Avvia</button>
+                            <button class="btn btn-sm" onclick="Projects.pause()">&#10074;&#10074; Pausa</button>
+                            <button class="btn btn-sm btn-success" onclick="Projects.resume()">&#9654; Riprendi</button>
+                            <button class="btn btn-sm btn-danger" onclick="Projects.stop()">&#9632; Stop</button>
                         </div>
                     </div>
-                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                        <div style="font-size: 13px; font-weight: 600;">config.toml Editor</div>
-                        <div style="display: flex; gap: 6px;">
-                            <button class="btn btn-sm" onclick="Config.reset()">Revert</button>
-                            <button class="btn btn-sm btn-primary" onclick="Config.save()">Save</button>
+
+                    <!-- Tab bar for project details -->
+                    <div class="tab-bar">
+                        <div class="tab active" data-tab="tasks" onclick="App.switchProjectTab('tasks')">Tasks</div>
+                        <div class="tab" data-tab="logs" onclick="App.switchProjectTab('logs')">Logs</div>
+                        <div class="tab" data-tab="config" onclick="App.switchProjectTab('config')">Config</div>
+                        <div style="flex: 1;"></div>
+                        <span id="project-task-count" style="font-size: 12px; color: var(--text-muted); padding-right: 12px;"></span>
+                    </div>
+
+                    <div class="tab-content">
+                        <!-- Tasks Panel -->
+                        <div class="tab-panel active" id="panel-tasks">
+                            <div class="task-toolbar">
+                                <input type="text" class="search-input" placeholder="Cerca task..."
+                                       oninput="Tasks.filterBySearch(this.value)">
+                                <select class="select-input" onchange="Tasks.filterByStatus(this.value)">
+                                    <option value="">Tutti</option>
+                                    <option value="pending">Pending</option>
+                                    <option value="in-progress">In Progress</option>
+                                    <option value="completed">Completed</option>
+                                    <option value="blocked">Blocked</option>
+                                </select>
+                                <div style="flex: 1;"></div>
+                                <button class="btn btn-sm btn-primary" onclick="Tasks.showAddModal()">+ Aggiungi Task</button>
+                            </div>
+                            <div style="flex: 1; overflow: auto;">
+                                <table class="task-table">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 50px;">ID</th>
+                                            <th>Titolo</th>
+                                            <th style="width: 110px;">Stato</th>
+                                            <th style="width: 90px;">Priorità</th>
+                                            <th style="width: 80px;">Azioni</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tasks-body">
+                                        <tr><td colspan="5" style="text-align: center; padding: 40px; color: var(--text-muted);">
+                                            Seleziona un progetto
+                                        </td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Logs Panel -->
+                        <div class="tab-panel" id="panel-logs">
+                            <div class="log-toolbar">
+                                <input type="text" class="search-input" id="log-search" placeholder="Cerca nei log..."
+                                       onkeydown="if(event.key==='Enter') Logs.search()">
+                                <button class="btn btn-sm" onclick="Logs.search()">Cerca</button>
+                                <button class="btn btn-sm btn-primary" id="log-autoscroll-btn" onclick="Logs.toggleAutoScroll()">
+                                    &#8615; Auto-scroll ON
+                                </button>
+                                <button class="btn btn-sm" onclick="Logs.clear()">Pulisci</button>
+                                <div style="flex: 1;"></div>
+                                <span id="log-status" style="font-size: 12px; color: var(--text-muted);"></span>
+                            </div>
+                            <div class="log-container">
+                                <div class="log-output" id="log-output">
+                                    <div style="padding: 40px; text-align: center; color: var(--text-muted);">
+                                        Avvia un progetto per vedere i log
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Config Panel -->
+                        <div class="tab-panel" id="panel-config">
+                            <div style="margin-bottom: 12px;">
+                                <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">Configurazione</div>
+                                <div id="config-info" style="padding: 12px; background: var(--bg-tertiary); border-radius: var(--radius); border: 1px solid var(--border);">
+                                    <span style="color: var(--text-muted);">Seleziona un progetto</span>
+                                </div>
+                            </div>
+                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                <div style="font-size: 13px; font-weight: 600;">config.toml</div>
+                                <div style="display: flex; gap: 6px;">
+                                    <button class="btn btn-sm" onclick="Config.reset()">Annulla</button>
+                                    <button class="btn btn-sm btn-primary" onclick="Config.save()">Salva</button>
+                                </div>
+                            </div>
+                            <textarea class="config-editor" id="config-editor" spellcheck="false"
+                                      placeholder="# Seleziona un progetto per modificare config.toml"></textarea>
                         </div>
                     </div>
-                    <textarea class="config-editor" id="config-editor" spellcheck="false"
-                              placeholder="# Select a project to edit its config.toml"></textarea>
                 </div>
             </div>
         </main>
@@ -155,7 +223,7 @@
         <!-- Right Sidebar: Metrics -->
         <aside class="metrics-panel">
             <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-muted); margin-bottom: 10px;">
-                System Metrics
+                Sistema
             </div>
 
             <!-- CPU -->
@@ -173,7 +241,7 @@
             <!-- Memory -->
             <div class="metric-card" id="metric-memory">
                 <div class="metric-card-header">
-                    <span class="metric-card-title">Memory</span>
+                    <span class="metric-card-title">RAM</span>
                 </div>
                 <div class="metric-value good">0%</div>
                 <div class="metric-sub">Loading...</div>
@@ -195,7 +263,7 @@
             <!-- Disk -->
             <div class="metric-card" id="metric-disk">
                 <div class="metric-card-header">
-                    <span class="metric-card-title">Disk</span>
+                    <span class="metric-card-title">Disco</span>
                 </div>
                 <div class="metric-value good">0%</div>
                 <div class="metric-sub">Loading...</div>
@@ -206,8 +274,8 @@
         <!-- Status Bar -->
         <footer class="status-bar">
             <div class="status-bar-left">
-                <span id="status-active-count">0 active agents</span>
-                <span id="status-ralph" style="color: var(--text-muted);">ralph-tui: checking...</span>
+                <span id="status-active-count">0 agenti attivi</span>
+                <span id="status-ralph" style="color: var(--text-muted);">ralph-tui: controllo...</span>
             </div>
             <div class="status-bar-right">
                 <span id="status-timestamp"></span>
@@ -217,43 +285,54 @@
 
     <!-- Modals -->
 
-    <!-- Launch Project Modal -->
-    <div class="modal-overlay" id="launch-modal">
-        <div class="modal">
-            <div class="modal-title">Launch Project: <span id="launch-project-name"></span></div>
+    <!-- New Project Modal -->
+    <div class="modal-overlay" id="new-project-modal">
+        <div class="modal" style="min-width: 500px;">
+            <div class="modal-title">Nuovo Progetto Ralph</div>
             <div class="form-group">
-                <label class="form-label">Model</label>
-                <input type="text" class="form-input" id="launch-model" value="qwen2.5-coder:7b"
-                       placeholder="e.g., qwen2.5-coder:7b">
+                <label class="form-label">Nome progetto *</label>
+                <input type="text" class="form-input" id="new-project-name"
+                       placeholder="es. my-web-app">
             </div>
             <div class="form-group">
-                <label class="form-label">Max Iterations</label>
-                <input type="number" class="form-input" id="launch-iterations" value="50" min="1" max="1000">
+                <label class="form-label">Descrivi cosa vuoi costruire *</label>
+                <textarea class="form-input" id="new-project-prompt" rows="5"
+                          placeholder="Descrivi il progetto in dettaglio. Ralph scomporrà automaticamente il lavoro in task..."></textarea>
             </div>
             <div class="form-group">
-                <label class="form-checkbox">
-                    <input type="checkbox" id="launch-headless" checked disabled>
-                    Headless mode (sempre attivo dalla dashboard)
-                </label>
+                <label class="form-label">Modello</label>
+                <select class="form-input" id="new-project-model">
+                    <option value="qwen2.5-coder:7b">qwen2.5-coder:7b</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Max iterazioni</label>
+                <input type="number" class="form-input" id="new-project-iterations" value="50" min="1" max="1000">
             </div>
             <div class="modal-footer">
-                <button class="btn" onclick="App.hideModal('launch-modal')">Cancel</button>
-                <button class="btn btn-primary" onclick="Projects.confirmLaunch()">&#9654; Launch</button>
+                <button class="btn" onclick="App.hideModal('new-project-modal')">Annulla</button>
+                <button class="btn btn-primary" id="create-project-btn" onclick="Projects.createFromPrompt()">
+                    Crea e Avvia
+                </button>
             </div>
         </div>
     </div>
 
-    <!-- Delete Confirmation Modal -->
-    <div class="modal-overlay" id="delete-modal">
+    <!-- Launch Project Modal -->
+    <div class="modal-overlay" id="launch-modal">
         <div class="modal">
-            <div class="modal-title">Delete Project</div>
-            <p style="margin-bottom: 16px;">
-                Are you sure you want to delete <strong id="delete-project-name"></strong>?
-                This action cannot be undone.
-            </p>
+            <div class="modal-title">Avvia Progetto: <span id="launch-project-name"></span></div>
+            <div class="form-group">
+                <label class="form-label">Modello</label>
+                <input type="text" class="form-input" id="launch-model" value="qwen2.5-coder:7b">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Max Iterazioni</label>
+                <input type="number" class="form-input" id="launch-iterations" value="50" min="1" max="1000">
+            </div>
             <div class="modal-footer">
-                <button class="btn" onclick="App.hideModal('delete-modal')">Cancel</button>
-                <button class="btn btn-danger" onclick="Projects.confirmDelete()">Delete</button>
+                <button class="btn" onclick="App.hideModal('launch-modal')">Annulla</button>
+                <button class="btn btn-primary" onclick="Projects.confirmLaunch()">&#9654; Avvia</button>
             </div>
         </div>
     </div>
@@ -261,30 +340,26 @@
     <!-- Add Task Modal -->
     <div class="modal-overlay" id="add-task-modal">
         <div class="modal">
-            <div class="modal-title">Add New Task</div>
+            <div class="modal-title">Aggiungi Task</div>
             <div class="form-group">
-                <label class="form-label">Title *</label>
-                <input type="text" class="form-input" id="new-task-title" placeholder="Task title">
+                <label class="form-label">Titolo *</label>
+                <input type="text" class="form-input" id="new-task-title" placeholder="Titolo del task">
             </div>
             <div class="form-group">
-                <label class="form-label">Description</label>
-                <textarea class="form-input" id="new-task-description" rows="3" placeholder="Task description"></textarea>
+                <label class="form-label">Descrizione</label>
+                <textarea class="form-input" id="new-task-description" rows="3" placeholder="Descrizione dettagliata"></textarea>
             </div>
             <div class="form-group">
-                <label class="form-label">Priority</label>
+                <label class="form-label">Priorità</label>
                 <select class="form-input" id="new-task-priority">
-                    <option value="high">High</option>
-                    <option value="medium" selected>Medium</option>
-                    <option value="low">Low</option>
+                    <option value="high">Alta</option>
+                    <option value="medium" selected>Media</option>
+                    <option value="low">Bassa</option>
                 </select>
             </div>
-            <div class="form-group">
-                <label class="form-label">Dependencies (comma-separated IDs)</label>
-                <input type="text" class="form-input" id="new-task-deps" placeholder="e.g., 1, 3, 5">
-            </div>
             <div class="modal-footer">
-                <button class="btn" onclick="App.hideModal('add-task-modal')">Cancel</button>
-                <button class="btn btn-primary" onclick="Tasks.confirmAdd()">Create Task</button>
+                <button class="btn" onclick="App.hideModal('add-task-modal')">Annulla</button>
+                <button class="btn btn-primary" onclick="Tasks.confirmAdd()">Crea</button>
             </div>
         </div>
     </div>
@@ -292,53 +367,37 @@
     <!-- Edit Task Modal -->
     <div class="modal-overlay" id="edit-task-modal">
         <div class="modal">
-            <div class="modal-title">Edit Task</div>
+            <div class="modal-title">Modifica Task</div>
             <input type="hidden" id="edit-task-id">
             <div class="form-group">
-                <label class="form-label">Title</label>
+                <label class="form-label">Titolo</label>
                 <input type="text" class="form-input" id="edit-task-title">
             </div>
             <div class="form-group">
-                <label class="form-label">Description</label>
+                <label class="form-label">Descrizione</label>
                 <textarea class="form-input" id="edit-task-description" rows="3"></textarea>
             </div>
             <div class="form-group">
-                <label class="form-label">Status</label>
+                <label class="form-label">Stato</label>
                 <select class="form-input" id="edit-task-status">
                     <option value="pending">Pending</option>
                     <option value="in-progress">In Progress</option>
                     <option value="completed">Completed</option>
                     <option value="blocked">Blocked</option>
                     <option value="cancelled">Cancelled</option>
-                    <option value="deferred">Deferred</option>
                 </select>
             </div>
             <div class="form-group">
-                <label class="form-label">Priority</label>
+                <label class="form-label">Priorità</label>
                 <select class="form-input" id="edit-task-priority">
-                    <option value="high">High</option>
-                    <option value="medium">Medium</option>
-                    <option value="low">Low</option>
+                    <option value="high">Alta</option>
+                    <option value="medium">Media</option>
+                    <option value="low">Bassa</option>
                 </select>
             </div>
-            <div class="form-group">
-                <label class="form-label">Dependencies (comma-separated IDs)</label>
-                <input type="text" class="form-input" id="edit-task-deps">
-            </div>
             <div class="modal-footer">
-                <button class="btn" onclick="App.hideModal('edit-task-modal')">Cancel</button>
-                <button class="btn btn-primary" onclick="Tasks.confirmEdit()">Save Changes</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Dependency Tree Modal -->
-    <div class="modal-overlay" id="dep-tree-modal">
-        <div class="modal" style="min-width: 500px;">
-            <div class="modal-title">Task Dependency Tree</div>
-            <div class="dep-tree" id="dep-tree-content"></div>
-            <div class="modal-footer">
-                <button class="btn" onclick="App.hideModal('dep-tree-modal')">Close</button>
+                <button class="btn" onclick="App.hideModal('edit-task-modal')">Annulla</button>
+                <button class="btn btn-primary" onclick="Tasks.confirmEdit()">Salva</button>
             </div>
         </div>
     </div>
@@ -350,6 +409,7 @@
     <script src="/static/js/api.js"></script>
     <script src="/static/js/websocket.js"></script>
     <script src="/static/js/performance.js"></script>
+    <script src="/static/js/chat.js"></script>
     <script src="/static/js/projects.js"></script>
     <script src="/static/js/tasks.js"></script>
     <script src="/static/js/logs.js"></script>

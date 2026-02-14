@@ -205,3 +205,22 @@ class MetricsHistory(BaseModel):
     gpu: list[float] = Field(default_factory=list)
     disk_read: list[float] = Field(default_factory=list)
     disk_write: list[float] = Field(default_factory=list)
+
+
+# --- Chat Models ---
+
+class ChatMessage(BaseModel):
+    role: str = Field(description="Message role: user, assistant, or system")
+    content: str = Field(description="Message content")
+
+
+class ChatRequest(BaseModel):
+    model: str = "qwen2.5-coder:7b"
+    messages: list[ChatMessage] = Field(default_factory=list)
+
+
+class ProjectFromPrompt(BaseModel):
+    name: str = Field(description="Project name (used as directory name)")
+    prompt: str = Field(description="User prompt describing what to build")
+    model: str = "qwen2.5-coder:7b"
+    max_iterations: int = 50

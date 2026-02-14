@@ -49,13 +49,13 @@ const Tasks = {
         }
 
         // Update count
-        const countEl = document.getElementById('tasks-count');
-        if (countEl) countEl.textContent = `${filtered.length} of ${tasks.length} tasks`;
+        const countEl = document.getElementById('project-task-count');
+        if (countEl) countEl.textContent = `${filtered.length} di ${tasks.length} task`;
 
         if (filtered.length === 0) {
             panel.innerHTML = `
-                <tr><td colspan="6" style="text-align: center; padding: 40px; color: var(--text-muted);">
-                    ${tasks.length === 0 ? 'No tasks found for this project' : 'No tasks match the current filters'}
+                <tr><td colspan="5" style="text-align: center; padding: 40px; color: var(--text-muted);">
+                    ${tasks.length === 0 ? 'Nessun task trovato' : 'Nessun task corrisponde ai filtri'}
                 </td></tr>
             `;
             return;
@@ -70,12 +70,10 @@ const Tasks = {
                 </td>
                 <td><span class="badge badge-${t.status}">${t.status}</span></td>
                 <td><span class="badge badge-${t.priority}">${t.priority}</span></td>
-                <td>${(t.dependencies || []).map(d => `<span class="dep-tag">${d}</span>`).join(' ') || '<span style="color: var(--text-muted);">none</span>'}</td>
                 <td>
                     <div style="display: flex; gap: 4px;">
-                        <button class="btn btn-sm" onclick="Tasks.editTask('${t.id}')" title="Edit">&#9998;</button>
-                        <button class="btn btn-sm btn-success" onclick="Tasks.toggleComplete('${t.id}')" title="Toggle complete">&#10003;</button>
-                        <button class="btn btn-sm btn-danger" onclick="Tasks.removeTask('${t.id}')" title="Delete">&#10005;</button>
+                        <button class="btn btn-sm" onclick="Tasks.editTask('${t.id}')" title="Modifica">&#9998;</button>
+                        <button class="btn btn-sm btn-success" onclick="Tasks.toggleComplete('${t.id}')" title="Completa">&#10003;</button>
                     </div>
                 </td>
             </tr>
@@ -99,13 +97,12 @@ const Tasks = {
 
     showAddModal() {
         if (!App.state.selectedProject) {
-            App.showToast('Select a project first', 'warning');
+            App.showToast('Seleziona un progetto', 'warning');
             return;
         }
         document.getElementById('new-task-title').value = '';
         document.getElementById('new-task-description').value = '';
         document.getElementById('new-task-priority').value = 'medium';
-        document.getElementById('new-task-deps').value = '';
         App.showModal('add-task-modal');
     },
 
@@ -115,25 +112,21 @@ const Tasks = {
 
         const title = document.getElementById('new-task-title').value.trim();
         if (!title) {
-            App.showToast('Title is required', 'warning');
+            App.showToast('Il titolo è obbligatorio', 'warning');
             return;
         }
-
-        const depsRaw = document.getElementById('new-task-deps').value.trim();
-        const deps = depsRaw ? depsRaw.split(',').map(d => d.trim()).filter(Boolean) : [];
 
         try {
             await api.createTask(project, {
                 title,
                 description: document.getElementById('new-task-description').value.trim(),
                 priority: document.getElementById('new-task-priority').value,
-                dependencies: deps,
             });
             App.hideModal('add-task-modal');
-            App.showToast('Task created', 'success');
+            App.showToast('Task creato', 'success');
             this.loadTasks(project);
         } catch (e) {
-            App.showToast(`Failed to create task: ${e.message}`, 'error');
+            App.showToast(`Errore creazione task: ${e.message}`, 'error');
         }
     },
 
@@ -163,7 +156,6 @@ const Tasks = {
         document.getElementById('edit-task-description').value = task.description || '';
         document.getElementById('edit-task-status').value = task.status;
         document.getElementById('edit-task-priority').value = task.priority;
-        document.getElementById('edit-task-deps').value = (task.dependencies || []).join(', ');
         App.showModal('edit-task-modal');
     },
 
@@ -172,8 +164,6 @@ const Tasks = {
         if (!project) return;
 
         const taskId = document.getElementById('edit-task-id').value;
-        const depsRaw = document.getElementById('edit-task-deps').value.trim();
-        const deps = depsRaw ? depsRaw.split(',').map(d => d.trim()).filter(Boolean) : [];
 
         try {
             await api.updateTask(project, taskId, {
@@ -181,13 +171,12 @@ const Tasks = {
                 description: document.getElementById('edit-task-description').value.trim(),
                 status: document.getElementById('edit-task-status').value,
                 priority: document.getElementById('edit-task-priority').value,
-                dependencies: deps,
             });
             App.hideModal('edit-task-modal');
-            App.showToast('Task updated', 'success');
+            App.showToast('Task aggiornato', 'success');
             this.loadTasks(project);
         } catch (e) {
-            App.showToast(`Failed to update task: ${e.message}`, 'error');
+            App.showToast(`Errore aggiornamento task: ${e.message}`, 'error');
         }
     },
 
