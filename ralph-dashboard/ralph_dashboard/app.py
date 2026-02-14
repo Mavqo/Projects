@@ -705,12 +705,14 @@ auto_commit = true
     launched = False
     pid = None
     if is_ralph_tui_available():
+        cfg = load_project_config(project_path)
         cmd = build_run_command(
             project_name=req.name,
             project_path=project_path,
             max_iterations=req.max_iterations,
             headless=True,
             model=req.model,
+            agent=cfg.agent,
         )
         # Auto-respond "1" to select "Enable auto-commit" when prompted
         proc = process_mgr.launch(req.name, cmd, project_path, auto_respond=["1\n"])

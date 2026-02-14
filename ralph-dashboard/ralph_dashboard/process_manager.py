@@ -62,8 +62,9 @@ class ManagedProcess:
             env = os.environ.copy()
             env["TERM"] = "dumb"
             env["NO_COLOR"] = "1"
-            env["CI"] = "1"
             env["FORCE_COLOR"] = "0"
+            # NOTE: Do NOT set CI=1 here – agents (opencode, claude, etc.)
+            # treat CI mode as "dry run / non-interactive" and skip work.
 
             self.process = subprocess.Popen(
                 self.command,
