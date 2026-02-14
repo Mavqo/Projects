@@ -14,6 +14,40 @@ from .models import LogEntry, LogLevel
 
 logger = logging.getLogger(__name__)
 
+# Regex to strip ANSI escape sequences (colors, cursor, TUI control codes)
+_ANSI_ESCAPE_RE = re.compile(
+    r"\x1b"          # ESC character
+    r"(?:"
+    r"\[[0-9;?]*[A-Za-z]"            # CSI: ESC [ ... letter
+    r"|\][^\x07\x1b]*(?:\x07|\x1b\\)"  # OSC: ESC ] ... BEL/ST
+    r"|[()][A-Z0-9]"                 # Character sets
+    r"|>[0-9;]*[a-zA-Z]"             # Private sequences
+    r"|=[0-9]*[a-zA-Z]?"             # Keypad mode
+    r"|[78DEHMNOPVWXZ\\^_#% ]."      # Two-char sequences
+    r")"
+    r"|\x07"         # BEL
+    r"|\x0f"         # SI
+    r"|\x0e"         # SO
+)
+
+
+def strip_ansi(text: str) -> str:
+    """Remove all ANSI escape sequences from text."""
+    return _ANSI_ESCAPE_RE.sub("", text)
+
+
+def _clean_line(line: str) -> str | None:
+    """Strip ANSI codes and discard empty/garbage lines."""
+    cleaned = strip_ansi(line).strip()
+    # Discard lines that are only whitespace or TUI drawing chars
+    if not cleaned:
+        return None
+    # Discard lines that are purely box-drawing or control characters
+    if all(c in "│┌┐└┘├┤┬┴─═║╔╗╚╝╠╣╦╩░▒▓█▸ \t" for c in cleaned):
+        return None
+    return cleaned
+
+
 # Common log line patterns
 LOG_PATTERNS = [
     # Standard: 2024-01-15 10:30:45 [INFO] message
@@ -141,7 +175,9 @@ class LogFileWatcher(threading.Thread):
                 while not self._stop_event.is_set():
                     line = f.readline()
                     if line:
-                        self.buffer.append(line.rstrip("\n"))
+                        cleaned = _clean_line(line.rstrip("\n"))
+                        if cleaned:
+                            self.buffer.append(cleaned)
                     else:
                         time.sleep(0.1)
         except Exception as exc:
@@ -166,8 +202,13 @@ class ProjectLogManager:
         return self._buffers[project_name]
 
     def add_line(self, project_name: str, line: str) -> None:
-        """Add a log line to a project's buffer (from process output)."""
-        self.get_buffer(project_name).append(line)
+        """Add a log line to a project's buffer (from process output).
+
+        ANSI escape codes are stripped and empty/TUI-only lines are discarded.
+        """
+        cleaned = _clean_line(line)
+        if cleaned:
+            self.get_buffer(project_name).append(cleaned)
 
     def watch_file(self, project_name: str, file_path: Path) -> None:
         """Start watching a log file for a project."""
@@ -212,7 +253,12 @@ class ProjectLogManager:
         try:
             with open(file_path, "r", encoding="utf-8", errors="replace") as f:
                 lines = f.readlines()
-            return [l.rstrip("\n") for l in lines[offset:offset + max_lines]]
+            cleaned = []
+            for l in lines[offset:offset + max_lines]:
+                c = _clean_line(l.rstrip("\n"))
+                if c:
+                    cleaned.append(c)
+            return cleaned
         except OSError as exc:
             logger.error("Failed to read log file %s: %s", file_path, exc)
             return []

@@ -246,10 +246,12 @@ async def launch_project(name: str, options: LaunchOptions | None = None):
         raise HTTPException(404, f"Project '{name}' not found")
 
     opts = options or LaunchOptions()
+    # Always force headless when launching from the dashboard -
+    # Ralph-TUI's own TUI interface cannot work inside a subprocess pipe
     cmd = build_run_command(
         project_name=name,
         max_iterations=opts.max_iterations,
-        headless=opts.headless,
+        headless=True,
         model=opts.model,
         agent=opts.agent,
     )

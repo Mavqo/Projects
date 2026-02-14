@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import signal
 import subprocess
 import threading
@@ -54,6 +55,14 @@ class ManagedProcess:
         """Start the subprocess."""
         logger.info("Starting process for %s: %s", self.project_name, " ".join(self.command))
         try:
+            # Use a sanitized environment: set TERM=dumb to suppress TUI rendering,
+            # and disable colors/interactive prompts in child processes.
+            env = os.environ.copy()
+            env["TERM"] = "dumb"
+            env["NO_COLOR"] = "1"
+            env["CI"] = "1"
+            env["FORCE_COLOR"] = "0"
+
             self.process = subprocess.Popen(
                 self.command,
                 cwd=str(self.cwd),
@@ -61,6 +70,7 @@ class ManagedProcess:
                 stderr=subprocess.PIPE,
                 text=True,
                 bufsize=1,
+                env=env,
             )
             self.status = ProjectStatus.RUNNING
             self.start_time = datetime.now()
