@@ -600,6 +600,7 @@ type = "json"
 [execution]
 max_iterations = {req.max_iterations}
 headless = true
+auto_commit = true
 """
     (ralph_dir / "config.toml").write_text(config_toml, encoding="utf-8")
 

@@ -240,6 +240,9 @@ def build_run_command(
 
     if headless:
         cmd.append("--headless")
+        # Auto-commit is required for parallel mode in headless;
+        # without it ralph-tui prompts interactively which blocks
+        cmd.append("--auto-commit")
     if model:
         cmd.extend(["--model", model])
     if agent:
