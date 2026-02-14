@@ -36,9 +36,10 @@ const Chat = {
         if (container) {
             container.innerHTML = `
                 <div class="chat-welcome">
+                    <div class="chat-welcome-icon">R</div>
                     <div class="chat-welcome-title">Chat con il tuo modello locale</div>
                     <div class="chat-welcome-sub">
-                        Scrivi un messaggio per chattare direttamente con Qwen o un altro modello Ollama installato.
+                        Scrivi un messaggio per chattare direttamente con Qwen o un altro modello Ollama installato sulla tua macchina.
                     </div>
                 </div>
             `;

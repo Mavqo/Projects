@@ -11,7 +11,10 @@
         <!-- Header -->
         <header class="header">
             <div class="header-left">
-                <div class="header-logo">Ralph <span>Dashboard</span></div>
+                <div class="header-logo">
+                    <div class="logo-icon">R</div>
+                    Ralph <span>Dashboard</span>
+                </div>
                 <div class="header-status">
                     <div class="status-dot" id="connection-dot"></div>
                     <span id="connection-text">Connecting...</span>
@@ -23,9 +26,8 @@
             </div>
         </header>
 
-        <!-- Left Sidebar: Navigation -->
+        <!-- Left Sidebar -->
         <aside class="sidebar">
-            <!-- Mode selector -->
             <div class="sidebar-mode-selector">
                 <button class="mode-btn active" data-mode="chat" onclick="App.switchMode('chat')">
                     <span class="mode-icon">&#128172;</span> Chat
@@ -59,7 +61,7 @@
                     <div class="sidebar-section-title">Progetti</div>
                 </div>
                 <div class="project-list" id="project-list">
-                    <div class="empty-state">
+                    <div class="empty-state" style="padding: 20px;">
                         <div class="empty-state-text" style="font-size: 12px;">Caricamento...</div>
                     </div>
                 </div>
@@ -78,9 +80,10 @@
                 <div class="chat-container">
                     <div class="chat-messages" id="chat-messages">
                         <div class="chat-welcome">
+                            <div class="chat-welcome-icon">R</div>
                             <div class="chat-welcome-title">Chat con il tuo modello locale</div>
                             <div class="chat-welcome-sub">
-                                Scrivi un messaggio per chattare direttamente con Qwen o un altro modello Ollama installato.
+                                Scrivi un messaggio per chattare direttamente con Qwen o un altro modello Ollama installato sulla tua macchina.
                             </div>
                         </div>
                     </div>
@@ -103,7 +106,8 @@
                 <!-- No project selected state -->
                 <div id="ralph-empty" class="ralph-empty-state">
                     <div class="chat-welcome">
-                        <div class="chat-welcome-title">Ralph-TUI Projects</div>
+                        <div class="chat-welcome-icon">&#9881;</div>
+                        <div class="chat-welcome-title">Progetti Ralph-TUI</div>
                         <div class="chat-welcome-sub">
                             Seleziona un progetto dalla sidebar o creane uno nuovo.<br>
                             Scrivi cosa vuoi costruire e Ralph lo scompone in task automaticamente.
@@ -113,7 +117,6 @@
 
                 <!-- Project detail view -->
                 <div id="ralph-detail" class="ralph-detail hidden">
-                    <!-- Project header -->
                     <div class="project-header">
                         <div class="project-header-info">
                             <h2 id="project-detail-name">-</h2>
@@ -130,13 +133,12 @@
                         </div>
                     </div>
 
-                    <!-- Tab bar for project details -->
                     <div class="tab-bar">
                         <div class="tab active" data-tab="tasks" onclick="App.switchProjectTab('tasks')">Tasks</div>
                         <div class="tab" data-tab="logs" onclick="App.switchProjectTab('logs')">Logs</div>
                         <div class="tab" data-tab="config" onclick="App.switchProjectTab('config')">Config</div>
                         <div style="flex: 1;"></div>
-                        <span id="project-task-count" style="font-size: 12px; color: var(--text-muted); padding-right: 12px;"></span>
+                        <span id="project-task-count" style="font-size: 12px; color: var(--text-faint); padding-right: 12px;"></span>
                     </div>
 
                     <div class="tab-content">
@@ -162,12 +164,12 @@
                                             <th style="width: 50px;">ID</th>
                                             <th>Titolo</th>
                                             <th style="width: 110px;">Stato</th>
-                                            <th style="width: 90px;">Priorità</th>
+                                            <th style="width: 90px;">Priorita</th>
                                             <th style="width: 80px;">Azioni</th>
                                         </tr>
                                     </thead>
                                     <tbody id="tasks-body">
-                                        <tr><td colspan="5" style="text-align: center; padding: 40px; color: var(--text-muted);">
+                                        <tr><td colspan="5" style="text-align: center; padding: 40px; color: var(--text-faint);">
                                             Seleziona un progetto
                                         </td></tr>
                                     </tbody>
@@ -186,11 +188,11 @@
                                 </button>
                                 <button class="btn btn-sm" onclick="Logs.clear()">Pulisci</button>
                                 <div style="flex: 1;"></div>
-                                <span id="log-status" style="font-size: 12px; color: var(--text-muted);"></span>
+                                <span id="log-status" style="font-size: 12px; color: var(--text-faint);"></span>
                             </div>
                             <div class="log-container">
                                 <div class="log-output" id="log-output">
-                                    <div style="padding: 40px; text-align: center; color: var(--text-muted);">
+                                    <div style="padding: 40px; text-align: center; color: var(--text-faint);">
                                         Avvia un progetto per vedere i log
                                     </div>
                                 </div>
@@ -201,8 +203,8 @@
                         <div class="tab-panel" id="panel-config">
                             <div style="margin-bottom: 12px;">
                                 <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">Configurazione</div>
-                                <div id="config-info" style="padding: 12px; background: var(--bg-tertiary); border-radius: var(--radius); border: 1px solid var(--border);">
-                                    <span style="color: var(--text-muted);">Seleziona un progetto</span>
+                                <div id="config-info" style="padding: 12px; background: var(--bg-elevated); border-radius: var(--radius-lg); border: 1px solid var(--border-subtle);">
+                                    <span style="color: var(--text-faint);">Seleziona un progetto</span>
                                 </div>
                             </div>
                             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
@@ -222,9 +224,7 @@
 
         <!-- Right Sidebar: Metrics -->
         <aside class="metrics-panel">
-            <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-muted); margin-bottom: 10px;">
-                Sistema
-            </div>
+            <div class="metrics-header">Sistema</div>
 
             <!-- CPU -->
             <div class="metric-card" id="metric-cpu">
@@ -275,7 +275,7 @@
         <footer class="status-bar">
             <div class="status-bar-left">
                 <span id="status-active-count">0 agenti attivi</span>
-                <span id="status-ralph" style="color: var(--text-muted);">ralph-tui: controllo...</span>
+                <span id="status-ralph" style="color: var(--text-faint);">ralph-tui: controllo...</span>
             </div>
             <div class="status-bar-right">
                 <span id="status-timestamp"></span>
@@ -297,7 +297,7 @@
             <div class="form-group">
                 <label class="form-label">Descrivi cosa vuoi costruire *</label>
                 <textarea class="form-input" id="new-project-prompt" rows="5"
-                          placeholder="Descrivi il progetto in dettaglio. Ralph scomporrà automaticamente il lavoro in task..."></textarea>
+                          placeholder="Descrivi il progetto in dettaglio. Ralph scomporra automaticamente il lavoro in task..."></textarea>
             </div>
             <div class="form-group">
                 <label class="form-label">Modello</label>
@@ -312,7 +312,7 @@
             <div class="modal-footer">
                 <button class="btn" onclick="App.hideModal('new-project-modal')">Annulla</button>
                 <button class="btn btn-primary" id="create-project-btn" onclick="Projects.createFromPrompt()">
-                    Crea e Avvia
+                    Crea Progetto
                 </button>
             </div>
         </div>
@@ -350,7 +350,7 @@
                 <textarea class="form-input" id="new-task-description" rows="3" placeholder="Descrizione dettagliata"></textarea>
             </div>
             <div class="form-group">
-                <label class="form-label">Priorità</label>
+                <label class="form-label">Priorita</label>
                 <select class="form-input" id="new-task-priority">
                     <option value="high">Alta</option>
                     <option value="medium" selected>Media</option>
@@ -388,7 +388,7 @@
                 </select>
             </div>
             <div class="form-group">
-                <label class="form-label">Priorità</label>
+                <label class="form-label">Priorita</label>
                 <select class="form-input" id="edit-task-priority">
                     <option value="high">Alta</option>
                     <option value="medium">Media</option>

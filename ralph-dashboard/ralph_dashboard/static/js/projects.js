@@ -52,10 +52,12 @@ const Projects = {
 
         if (!name) {
             App.showToast('Inserisci un nome per il progetto', 'warning');
+            nameInput?.focus();
             return;
         }
         if (!prompt) {
             App.showToast('Descrivi cosa vuoi costruire', 'warning');
+            promptInput?.focus();
             return;
         }
 
@@ -64,7 +66,7 @@ const Projects = {
 
         if (btn) {
             btn.disabled = true;
-            btn.textContent = 'Creazione in corso...';
+            btn.innerHTML = '<span class="spinner spinner-sm" style="display:inline-block;"></span> Creazione...';
         }
 
         try {
@@ -76,23 +78,38 @@ const Projects = {
             });
 
             App.hideModal('new-project-modal');
-            App.showToast(result.message || `Progetto "${safeName}" creato!`, 'success');
+
+            // Show appropriate feedback
+            const launched = result.data?.launched;
+            const taskCount = result.data?.task_count || 0;
+
+            if (launched) {
+                App.showToast(`"${safeName}" creato con ${taskCount} task e avviato!`, 'success');
+            } else {
+                App.showToast(`"${safeName}" creato con ${taskCount} task.`, 'success');
+            }
 
             // Clear form
             if (nameInput) nameInput.value = '';
             if (promptInput) promptInput.value = '';
 
-            // Refresh projects and select the new one
-            await App.loadProjects();
+            // Switch to Ralph mode, refresh projects, and select the new one
             App.switchMode('ralph');
-            App.selectProject(safeName);
-            App.switchProjectTab('tasks');
+            await App.loadProjects();
+
+            // Small delay to ensure project list is rendered before selecting
+            setTimeout(() => {
+                App.selectProject(safeName);
+                App.switchProjectTab('tasks');
+            }, 100);
+
         } catch (e) {
+            console.error('Create project error:', e);
             App.showToast(`Errore: ${e.message}`, 'error');
         } finally {
             if (btn) {
                 btn.disabled = false;
-                btn.textContent = 'Crea e Avvia';
+                btn.innerHTML = 'Crea Progetto';
             }
         }
     },
