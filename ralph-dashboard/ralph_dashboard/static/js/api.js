@@ -175,6 +175,46 @@ class ApiClient {
             method: 'POST',
         });
     }
+
+    // Chat Persistence
+    async listChats() {
+        return this._fetch('/chats');
+    }
+
+    async createChat(title = 'Nuova chat', model = '') {
+        return this._fetch(`/chats?title=${encodeURIComponent(title)}&model=${encodeURIComponent(model)}`, {
+            method: 'POST',
+        });
+    }
+
+    async getChat(convId) {
+        return this._fetch(`/chats/${encodeURIComponent(convId)}`);
+    }
+
+    async updateChat(convId, updates) {
+        return this._fetch(`/chats/${encodeURIComponent(convId)}`, {
+            method: 'PUT',
+            body: JSON.stringify(updates),
+        });
+    }
+
+    async addChatMessage(convId, role, content) {
+        return this._fetch(`/chats/${encodeURIComponent(convId)}/messages`, {
+            method: 'POST',
+            body: JSON.stringify({ role, content }),
+        });
+    }
+
+    async deleteChat(convId) {
+        return this._fetch(`/chats/${encodeURIComponent(convId)}`, {
+            method: 'DELETE',
+        });
+    }
+
+    // Web Search
+    async searchWeb(query, maxResults = 5) {
+        return this._fetch(`/search?q=${encodeURIComponent(query)}&max_results=${maxResults}`);
+    }
 }
 
 // Singleton

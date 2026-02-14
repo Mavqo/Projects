@@ -199,10 +199,16 @@ def build_run_command(
     model: str | None = None,
     agent: str | None = None,
 ) -> list[str]:
-    """Build the ralph-tui run command with options."""
+    """Build the ralph-tui run command with options.
+
+    Note: We run from the project directory (cwd), so ralph-tui should
+    pick up .ralph-tui/config.toml automatically. We also pass
+    --tracker json explicitly to override any defaults.
+    """
     cmd = [find_ralph_tui() or "ralph-tui", "run"]
     cmd.extend(["--project", project_name])
     cmd.extend(["--max-iterations", str(max_iterations)])
+    cmd.extend(["--tracker", "json"])
     if headless:
         cmd.append("--headless")
     if model:

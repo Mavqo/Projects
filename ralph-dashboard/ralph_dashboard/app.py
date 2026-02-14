@@ -39,6 +39,8 @@ from .ralph_integration import (
 )
 from .ollama_client import OllamaClient
 from .system_monitor import SystemMonitor
+from . import chat_store
+from . import web_search
 
 logger = logging.getLogger(__name__)
 
@@ -502,6 +504,66 @@ async def ollama_chat(req: ChatRequest):
     return {"role": "assistant", "content": reply, "model": req.model}
 
 
+# --- Chat Persistence Endpoints ---
+
+@app.get("/api/chats")
+async def list_chats():
+    """List all saved chat conversations."""
+    return chat_store.list_conversations()
+
+
+@app.post("/api/chats")
+async def create_chat(title: str = "Nuova chat", model: str = ""):
+    """Create a new chat conversation."""
+    return chat_store.create_conversation(title=title, model=model)
+
+
+@app.get("/api/chats/{conv_id}")
+async def get_chat(conv_id: str):
+    """Get a specific chat conversation with all messages."""
+    conv = chat_store.get_conversation(conv_id)
+    if not conv:
+        raise HTTPException(404, f"Conversation '{conv_id}' not found")
+    return conv
+
+
+@app.put("/api/chats/{conv_id}")
+async def update_chat(conv_id: str, updates: dict):
+    """Update a chat conversation (title, messages)."""
+    conv = chat_store.update_conversation(conv_id, updates)
+    if not conv:
+        raise HTTPException(404, f"Conversation '{conv_id}' not found")
+    return conv
+
+
+@app.post("/api/chats/{conv_id}/messages")
+async def add_chat_message(conv_id: str, message: dict):
+    """Add a message to a conversation."""
+    role = message.get("role", "user")
+    content = message.get("content", "")
+    conv = chat_store.add_message(conv_id, role, content)
+    if not conv:
+        raise HTTPException(404, f"Conversation '{conv_id}' not found")
+    return conv
+
+
+@app.delete("/api/chats/{conv_id}")
+async def delete_chat(conv_id: str):
+    """Delete a chat conversation."""
+    if chat_store.delete_conversation(conv_id):
+        return ApiResponse(message="Conversation deleted")
+    raise HTTPException(404, f"Conversation '{conv_id}' not found")
+
+
+# --- Web Search Endpoint ---
+
+@app.get("/api/search")
+async def search_web(q: str = Query(..., min_length=1), max_results: int = Query(default=5, ge=1, le=10)):
+    """Search the web using DuckDuckGo."""
+    results = await web_search.search(q, max_results=max_results)
+    return {"query": q, "results": results}
+
+
 @app.post("/api/projects/create-from-prompt")
 async def create_project_from_prompt(req: ProjectFromPrompt):
     """Create a new project from a user prompt.
@@ -523,10 +585,13 @@ async def create_project_from_prompt(req: ProjectFromPrompt):
     ralph_dir = project_path / ".ralph-tui"
     ralph_dir.mkdir(exist_ok=True)
 
-    # Write config.toml
+    # Write config.toml - use [tracker] section (what ralph-tui reads)
     config_toml = f"""[agent]
 type = "opencode"
 model = "{req.model}"
+
+[tracker]
+type = "json"
 
 [issue_tracker]
 type = "json"
@@ -581,13 +646,17 @@ headless = true
         t.setdefault("dependencies", [])
         t.setdefault("description", "")
 
-    # 3. Save tasks.json
+    # 3. Save tasks.json in multiple locations for compatibility
+    tasks_data = {"tasks": tasks_list}
+    tasks_json = json.dumps(tasks_data, indent=2, ensure_ascii=False)
+
+    # Primary: tasks/tasks.json
     tasks_dir = project_path / "tasks"
     tasks_dir.mkdir(exist_ok=True)
-    tasks_data = {"tasks": tasks_list}
-    (tasks_dir / "tasks.json").write_text(
-        json.dumps(tasks_data, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
+    (tasks_dir / "tasks.json").write_text(tasks_json, encoding="utf-8")
+
+    # Also in .ralph-tui/tasks.json for ralph-tui compatibility
+    (ralph_dir / "tasks.json").write_text(tasks_json, encoding="utf-8")
 
     # 4. Save prd.json
     prd_data = {

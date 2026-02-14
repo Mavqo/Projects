@@ -17,6 +17,8 @@ const App = {
 
     init() {
         document.documentElement.setAttribute('data-theme', this.state.theme);
+        const btn = document.getElementById('theme-toggle');
+        if (btn) btn.textContent = this.state.theme === 'dark' ? '\u2600' : '\u263E';
 
         // Start WebSocket for metrics
         wsManager.connect('metrics', '/ws/metrics', (data) => {
@@ -43,6 +45,7 @@ const App = {
         this.loadSystemStatus();
         this.loadProjects();
         this.checkOllama();
+        Chat.loadChatList();
 
         // Periodic refreshes
         setInterval(() => this.loadProjects(), 10000);
@@ -54,6 +57,20 @@ const App = {
         // Load metrics history for charts
         this.loadMetricsHistory();
         setInterval(() => this.loadMetricsHistory(), 30000);
+
+        // Close modals on backdrop click
+        document.querySelectorAll('.modal-overlay').forEach(overlay => {
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) {
+                    overlay.classList.remove('active');
+                }
+            });
+        });
+
+        // Preload speech synthesis voices
+        if ('speechSynthesis' in window) {
+            speechSynthesis.getVoices();
+        }
     },
 
     switchMode(mode) {
@@ -77,6 +94,10 @@ const App = {
         // When switching to ralph, refresh projects
         if (mode === 'ralph') {
             this.loadProjects();
+        }
+        // When switching to chat, refresh chat list
+        if (mode === 'chat') {
+            Chat.loadChatList();
         }
     },
 
@@ -106,7 +127,7 @@ const App = {
             const el = document.getElementById('ollama-status');
             if (el) {
                 el.textContent = status.available ? 'Ollama: online' : 'Ollama: offline';
-                el.style.color = status.available ? 'var(--success)' : 'var(--danger)';
+                el.style.color = status.available ? 'var(--success)' : 'var(--text-faint)';
             }
             if (status.available) {
                 Chat.loadModels();
@@ -188,6 +209,32 @@ const App = {
             Logs.connect(name);
         } else if (this.state.activeProjectTab === 'config') {
             Config.loadConfig(name);
+        }
+    },
+
+    async deleteProject(name) {
+        name = name || this.state.selectedProject;
+        if (!name) return;
+
+        // Show confirmation
+        if (!confirm(`Eliminare il progetto "${name}" e tutti i suoi file?\n\nQuesta azione non puo essere annullata.`)) {
+            return;
+        }
+
+        try {
+            await api.deleteProject(name);
+            App.showToast(`Progetto "${name}" eliminato`, 'success');
+
+            // Clear selection if we deleted the active project
+            if (this.state.selectedProject === name) {
+                this.state.selectedProject = null;
+                document.getElementById('ralph-detail')?.classList.add('hidden');
+                document.getElementById('ralph-empty')?.classList.remove('hidden');
+            }
+
+            await this.loadProjects();
+        } catch (e) {
+            App.showToast(`Errore eliminazione: ${e.message}`, 'error');
         }
     },
 

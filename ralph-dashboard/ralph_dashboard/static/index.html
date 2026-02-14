@@ -93,6 +93,9 @@
                                       placeholder="Scrivi un messaggio..."
                                       onkeydown="Chat.handleKey(event)"
                                       oninput="Chat.autoResize(this)"></textarea>
+                            <button class="btn btn-icon" onclick="Chat.searchWeb()" title="Cerca sul web" style="color:var(--text-muted);min-width:32px;height:32px;padding:0;">
+                                &#128269;
+                            </button>
                             <button class="chat-send-btn" id="chat-send-btn" onclick="Chat.send()">
                                 &#9654;
                             </button>
@@ -124,6 +127,9 @@
                             <a href="#" id="project-folder-link" class="folder-link" title="Apri cartella progetto">
                                 &#128193; Apri cartella
                             </a>
+                            <button class="btn btn-sm btn-danger" onclick="App.deleteProject()" title="Elimina cartella progetto">
+                                &#128465; Elimina
+                            </button>
                         </div>
                         <div class="project-header-actions">
                             <button class="btn btn-sm btn-primary" onclick="Projects.launch()">&#9654; Avvia</button>
