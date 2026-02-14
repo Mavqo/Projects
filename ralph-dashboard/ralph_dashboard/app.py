@@ -594,8 +594,13 @@ async def create_project_from_prompt(req: ProjectFromPrompt):
         _sp.run(["git", "init"], cwd=str(project_path), capture_output=True)
         _sp.run(["git", "checkout", "-b", "main"], cwd=str(project_path), capture_output=True)
 
-    # Write config.toml - use [tracker] section (what ralph-tui reads)
-    config_toml = f"""[agent]
+    # Write config.toml in v2.1 format so ralph-tui doesn't "upgrade"
+    # and wipe the content.  Without configVersion ralph-tui replaces
+    # the entire file with just `configVersion = "2.1"`, which causes
+    # workers to start with no agent/model configuration → 0 tasks.
+    config_toml = f"""configVersion = "2.1"
+
+[agent]
 type = "opencode"
 model = "{req.model}"
 
