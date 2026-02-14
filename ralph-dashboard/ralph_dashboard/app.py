@@ -264,7 +264,8 @@ async def launch_project(name: str, options: LaunchOptions | None = None):
         agent=opts.agent,
     )
 
-    proc = process_mgr.launch(name, cmd, project_path)
+    # Auto-respond "1" to select "Enable auto-commit" when prompted
+    proc = process_mgr.launch(name, cmd, project_path, auto_respond=["1\n"])
 
     # Start watching log files
     for log_file in find_log_files(project_path):
@@ -692,7 +693,8 @@ auto_commit = true
             headless=True,
             model=req.model,
         )
-        proc = process_mgr.launch(req.name, cmd, project_path)
+        # Auto-respond "1" to select "Enable auto-commit" when prompted
+        proc = process_mgr.launch(req.name, cmd, project_path, auto_respond=["1\n"])
         launched = True
         pid = proc.pid
         for log_file in find_log_files(project_path):

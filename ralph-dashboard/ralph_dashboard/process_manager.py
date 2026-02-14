@@ -28,6 +28,7 @@ class ManagedProcess:
         cwd: Path,
         on_output: Callable[[str, str], None] | None = None,
         on_exit: Callable[[str, int], None] | None = None,
+        auto_respond: list[str] | None = None,
     ) -> None:
         self.project_name = project_name
         self.command = command
@@ -40,6 +41,7 @@ class ManagedProcess:
         self._on_exit = on_exit
         self._output_thread: threading.Thread | None = None
         self._stderr_thread: threading.Thread | None = None
+        self._auto_respond = auto_respond or []
 
     @property
     def pid(self) -> int | None:
@@ -66,6 +68,7 @@ class ManagedProcess:
             self.process = subprocess.Popen(
                 self.command,
                 cwd=str(self.cwd),
+                stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
@@ -74,6 +77,13 @@ class ManagedProcess:
             )
             self.status = ProjectStatus.RUNNING
             self.start_time = datetime.now()
+
+            # Auto-respond to interactive prompts (e.g. auto-commit selection)
+            if self._auto_respond and self.process.stdin:
+                threading.Thread(
+                    target=self._write_auto_responses,
+                    daemon=True,
+                ).start()
 
             # Start output reader threads
             self._output_thread = threading.Thread(
@@ -101,6 +111,24 @@ class ManagedProcess:
             self.status = ProjectStatus.ERROR
             logger.error("Permission denied: %s", exc)
             raise
+
+    def _write_auto_responses(self) -> None:
+        """Write pre-canned responses to stdin for interactive prompts."""
+        import time
+        stdin = self.process.stdin
+        if not stdin:
+            return
+        try:
+            for response in self._auto_respond:
+                # Small delay to let the process initialize and show the prompt
+                time.sleep(1.5)
+                if not self.is_running:
+                    break
+                logger.debug("Auto-responding '%s' to %s", response.strip(), self.project_name)
+                stdin.write(response)
+                stdin.flush()
+        except (BrokenPipeError, OSError) as exc:
+            logger.debug("Auto-respond pipe closed: %s", exc)
 
     def _read_stream(self, stream, stream_name: str) -> None:
         """Read lines from a stream and forward to callback."""
@@ -197,7 +225,13 @@ class ProcessManager:
             except Exception as exc:
                 logger.debug("Exit callback error: %s", exc)
 
-    def launch(self, project_name: str, command: list[str], cwd: Path) -> ManagedProcess:
+    def launch(
+        self,
+        project_name: str,
+        command: list[str],
+        cwd: Path,
+        auto_respond: list[str] | None = None,
+    ) -> ManagedProcess:
         """Launch a new Ralph-TUI process for a project."""
         with self._lock:
             # Stop existing process if running
@@ -210,6 +244,7 @@ class ProcessManager:
                 cwd=cwd,
                 on_output=self._handle_output,
                 on_exit=self._handle_exit,
+                auto_respond=auto_respond,
             )
             proc.start()
             self._processes[project_name] = proc
