@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import shutil
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -582,10 +583,16 @@ async def create_project_from_prompt(req: ProjectFromPrompt):
     if project_path.exists():
         raise HTTPException(400, f"Project '{req.name}' already exists")
 
-    # 1. Create directory structure
+    # 1. Create directory structure and init git repo
     project_path.mkdir(parents=True, exist_ok=True)
     ralph_dir = project_path / ".ralph-tui"
     ralph_dir.mkdir(exist_ok=True)
+
+    # Ralph-TUI parallel mode needs a git repo for auto-commit and branching
+    if not (project_path / ".git").exists():
+        import subprocess as _sp
+        _sp.run(["git", "init"], cwd=str(project_path), capture_output=True)
+        _sp.run(["git", "checkout", "-b", "main"], cwd=str(project_path), capture_output=True)
 
     # Write config.toml - use [tracker] section (what ralph-tui reads)
     config_toml = f"""[agent]
@@ -681,6 +688,18 @@ auto_commit = true
     # Also in .ralph-tui/tasks.json and prd.json for compatibility
     (ralph_dir / "tasks.json").write_text(prd_json, encoding="utf-8")
     (project_path / "prd.json").write_text(prd_json, encoding="utf-8")
+
+    # 4. Initial git commit so ralph-tui can create branches
+    import subprocess as _sp
+    _sp.run(["git", "add", "-A"], cwd=str(project_path), capture_output=True)
+    _sp.run(
+        ["git", "commit", "-m", "Initial project setup by Ralph Dashboard"],
+        cwd=str(project_path), capture_output=True,
+        env={**os.environ, "GIT_AUTHOR_NAME": "Ralph Dashboard",
+             "GIT_AUTHOR_EMAIL": "ralph@dashboard",
+             "GIT_COMMITTER_NAME": "Ralph Dashboard",
+             "GIT_COMMITTER_EMAIL": "ralph@dashboard"},
+    )
 
     # 5. Launch Ralph-TUI if available
     launched = False
