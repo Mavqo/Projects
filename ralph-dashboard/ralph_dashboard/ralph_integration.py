@@ -157,37 +157,51 @@ def discover_projects(projects_dir: Path) -> list[Project]:
 
 
 def _count_tasks(project_path: Path) -> tuple[int, int]:
-    """Count total and completed tasks in a project."""
+    """Count total and completed tasks in a project.
+
+    Supports both ralph-tui userStories format and legacy tasks format.
+    """
     total = 0
     completed = 0
 
-    # Check for tasks.json
+    def _count_from_data(data: dict) -> tuple[int, int]:
+        """Extract counts from a parsed JSON dict."""
+        # Ralph-TUI userStories format
+        stories = data.get("userStories", [])
+        if stories:
+            t = len(stories)
+            c = sum(1 for s in stories if s.get("passes", False))
+            return t, c
+        # Legacy tasks format
+        tasks = data.get("tasks", data if isinstance(data, list) else [])
+        if tasks:
+            t = len(tasks)
+            c = sum(
+                1 for task in tasks
+                if task.get("status", "").lower() in ("completed", "done", "complete")
+                or task.get("passes", False)
+            )
+            return t, c
+        return 0, 0
+
+    # Check tasks/tasks.json first
     tasks_file = project_path / "tasks" / "tasks.json"
     if tasks_file.exists():
         try:
             data = json.loads(tasks_file.read_text(encoding="utf-8"))
-            tasks = data.get("tasks", data if isinstance(data, list) else [])
-            total = len(tasks)
-            completed = sum(
-                1 for t in tasks
-                if t.get("status", "").lower() in ("completed", "done", "complete")
-            )
+            total, completed = _count_from_data(data)
         except (json.JSONDecodeError, AttributeError) as exc:
             logger.debug("Failed to parse tasks.json: %s", exc)
 
-    # Check for prd.json that may contain tasks
-    prd_file = project_path / "prd.json"
-    if prd_file.exists() and total == 0:
-        try:
-            data = json.loads(prd_file.read_text(encoding="utf-8"))
-            tasks = data.get("tasks", [])
-            total = len(tasks)
-            completed = sum(
-                1 for t in tasks
-                if t.get("status", "").lower() in ("completed", "done", "complete")
-            )
-        except (json.JSONDecodeError, AttributeError):
-            pass
+    # Fallback to prd.json
+    if total == 0:
+        prd_file = project_path / "prd.json"
+        if prd_file.exists():
+            try:
+                data = json.loads(prd_file.read_text(encoding="utf-8"))
+                total, completed = _count_from_data(data)
+            except (json.JSONDecodeError, AttributeError):
+                pass
 
     return total, completed
 

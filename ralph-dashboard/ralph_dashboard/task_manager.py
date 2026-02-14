@@ -63,12 +63,20 @@ class TaskManager:
         )
 
     def _parse_task(self, raw: dict) -> Task:
-        """Parse a raw dict into a Task model."""
+        """Parse a raw dict into a Task model.
+
+        Supports both legacy 'tasks' format and ralph-tui 'userStories' format.
+        """
         # Handle various field naming conventions
         task_id = raw.get("id", raw.get("task_id", ""))
         title = raw.get("title", raw.get("name", raw.get("summary", "")))
         description = raw.get("description", raw.get("details", ""))
-        raw_status = str(raw.get("status", "pending")).lower().replace(" ", "-")
+
+        # ralph-tui userStories use "passes" boolean instead of "status" string
+        if "passes" in raw and "status" not in raw:
+            raw_status = "completed" if raw.get("passes") else "pending"
+        else:
+            raw_status = str(raw.get("status", "pending")).lower().replace(" ", "-")
 
         # Map status strings
         status_map = {
@@ -91,21 +99,29 @@ class TaskManager:
         }
         status = status_map.get(raw_status, TaskStatus.PENDING)
 
-        # Parse priority
-        raw_priority = str(raw.get("priority", "medium")).lower()
-        priority_map = {
-            "high": TaskPriority.HIGH,
-            "critical": TaskPriority.HIGH,
-            "urgent": TaskPriority.HIGH,
-            "medium": TaskPriority.MEDIUM,
-            "normal": TaskPriority.MEDIUM,
-            "low": TaskPriority.LOW,
-            "minor": TaskPriority.LOW,
-        }
-        priority = priority_map.get(raw_priority, TaskPriority.MEDIUM)
+        # Parse priority - ralph-tui uses integers (1=highest), legacy uses strings
+        raw_priority = raw.get("priority", "medium")
+        if isinstance(raw_priority, int):
+            if raw_priority <= 1:
+                priority = TaskPriority.HIGH
+            elif raw_priority <= 3:
+                priority = TaskPriority.MEDIUM
+            else:
+                priority = TaskPriority.LOW
+        else:
+            priority_map = {
+                "high": TaskPriority.HIGH,
+                "critical": TaskPriority.HIGH,
+                "urgent": TaskPriority.HIGH,
+                "medium": TaskPriority.MEDIUM,
+                "normal": TaskPriority.MEDIUM,
+                "low": TaskPriority.LOW,
+                "minor": TaskPriority.LOW,
+            }
+            priority = priority_map.get(str(raw_priority).lower(), TaskPriority.MEDIUM)
 
-        # Parse dependencies
-        deps = raw.get("dependencies", raw.get("depends_on", []))
+        # Parse dependencies - ralph-tui uses "dependsOn", legacy uses "dependencies"
+        deps = raw.get("dependencies", raw.get("dependsOn", raw.get("depends_on", [])))
         if isinstance(deps, str):
             deps = [d.strip() for d in deps.split(",") if d.strip()]
 
@@ -123,7 +139,7 @@ class TaskManager:
             metadata={k: v for k, v in raw.items() if k not in (
                 "id", "task_id", "title", "name", "summary", "description",
                 "details", "status", "priority", "dependencies", "depends_on",
-                "subtasks",
+                "dependsOn", "subtasks", "passes", "acceptanceCriteria",
             )},
         )
 
@@ -142,13 +158,26 @@ class TaskManager:
         raw.update(task.metadata)
         return raw
 
+    def _extract_raw_tasks(self, data: dict | list) -> list[dict]:
+        """Extract raw task/story list from various JSON schemas."""
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict):
+            # ralph-tui userStories format
+            stories = data.get("userStories")
+            if isinstance(stories, list) and stories:
+                return stories
+            # legacy tasks format
+            tasks = data.get("tasks")
+            if isinstance(tasks, list):
+                return tasks
+        return []
+
     def list_tasks(self) -> list[Task]:
         """Get all tasks from the tracker file."""
         data = self._load_raw()
-        raw_tasks = data.get("tasks", data if isinstance(data, list) else [])
-        if isinstance(raw_tasks, list):
-            return [self._parse_task(t) for t in raw_tasks if isinstance(t, dict)]
-        return []
+        raw_tasks = self._extract_raw_tasks(data)
+        return [self._parse_task(t) for t in raw_tasks if isinstance(t, dict)]
 
     def get_task(self, task_id: str | int) -> Task | None:
         """Get a specific task by ID."""
@@ -157,10 +186,18 @@ class TaskManager:
                 return task
         return None
 
+    def _get_list_key(self, data: dict) -> str:
+        """Determine which key holds the tasks/stories list."""
+        if isinstance(data, dict):
+            if "userStories" in data:
+                return "userStories"
+        return "tasks"
+
     def update_task(self, task_id: str | int, update: TaskUpdate) -> Task | None:
         """Update a task's fields."""
         data = self._load_raw()
-        raw_tasks = data.get("tasks", data if isinstance(data, list) else [])
+        raw_tasks = self._extract_raw_tasks(data)
+        key = self._get_list_key(data)
 
         for raw_task in raw_tasks:
             if str(raw_task.get("id", raw_task.get("task_id", ""))) == str(task_id):
@@ -170,14 +207,16 @@ class TaskManager:
                     raw_task["description"] = update.description
                 if update.status is not None:
                     raw_task["status"] = update.status.value
+                    # Also update 'passes' for userStories compatibility
+                    raw_task["passes"] = update.status == TaskStatus.COMPLETED
                 if update.priority is not None:
                     raw_task["priority"] = update.priority.value
                 if update.dependencies is not None:
                     raw_task["dependencies"] = update.dependencies
 
-                if isinstance(data, dict) and "tasks" in data:
-                    data["tasks"] = raw_tasks
-                self._save_raw(data if isinstance(data, dict) else {"tasks": raw_tasks})
+                if isinstance(data, dict):
+                    data[key] = raw_tasks
+                self._save_raw(data if isinstance(data, dict) else {key: raw_tasks})
                 return self._parse_task(raw_task)
 
         return None
@@ -185,34 +224,58 @@ class TaskManager:
     def create_task(self, create: TaskCreate) -> Task:
         """Create a new task."""
         data = self._load_raw()
-        raw_tasks = data.get("tasks", []) if isinstance(data, dict) else data if isinstance(data, list) else []
+        raw_tasks = self._extract_raw_tasks(data)
+        key = self._get_list_key(data)
 
         # Generate new ID
-        existing_ids = [t.get("id", 0) for t in raw_tasks if isinstance(t, dict)]
-        numeric_ids = [int(i) for i in existing_ids if str(i).isdigit()]
-        new_id = max(numeric_ids, default=0) + 1
+        existing_ids = [t.get("id", "") for t in raw_tasks if isinstance(t, dict)]
+        # For userStories format, generate US-XXX; for legacy, generate integers
+        if key == "userStories":
+            nums = []
+            for eid in existing_ids:
+                if isinstance(eid, str) and eid.startswith("US-"):
+                    try:
+                        nums.append(int(eid.split("-")[1]))
+                    except (ValueError, IndexError):
+                        pass
+            new_id = f"US-{max(nums, default=0) + 1:03d}"
+            new_task_raw = {
+                "id": new_id,
+                "title": create.title,
+                "description": create.description,
+                "acceptanceCriteria": [],
+                "priority": {"high": 1, "medium": 2, "low": 3}.get(
+                    create.priority.value, 2
+                ),
+                "passes": False,
+                "dependsOn": create.dependencies,
+            }
+        else:
+            numeric_ids = [int(i) for i in existing_ids if str(i).isdigit()]
+            new_id_num = max(numeric_ids, default=0) + 1
+            new_task_raw = {
+                "id": new_id_num,
+                "title": create.title,
+                "description": create.description,
+                "status": TaskStatus.PENDING.value,
+                "priority": create.priority.value,
+                "dependencies": create.dependencies,
+            }
 
-        new_task_raw = {
-            "id": new_id,
-            "title": create.title,
-            "description": create.description,
-            "status": TaskStatus.PENDING.value,
-            "priority": create.priority.value,
-            "dependencies": create.dependencies,
-        }
         raw_tasks.append(new_task_raw)
 
         if isinstance(data, dict):
-            data["tasks"] = raw_tasks
+            data[key] = raw_tasks
         else:
-            data = {"tasks": raw_tasks}
+            data = {key: raw_tasks}
         self._save_raw(data)
         return self._parse_task(new_task_raw)
 
     def delete_task(self, task_id: str | int) -> bool:
         """Delete a task by ID."""
         data = self._load_raw()
-        raw_tasks = data.get("tasks", data if isinstance(data, list) else [])
+        raw_tasks = self._extract_raw_tasks(data)
+        key = self._get_list_key(data)
 
         original_len = len(raw_tasks)
         raw_tasks = [
@@ -223,10 +286,10 @@ class TaskManager:
         if len(raw_tasks) == original_len:
             return False
 
-        if isinstance(data, dict) and "tasks" in data:
-            data["tasks"] = raw_tasks
+        if isinstance(data, dict):
+            data[key] = raw_tasks
         else:
-            data = {"tasks": raw_tasks}
+            data = {key: raw_tasks}
         self._save_raw(data)
         return True
 

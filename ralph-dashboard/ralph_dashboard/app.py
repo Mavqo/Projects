@@ -603,17 +603,22 @@ headless = true
 """
     (ralph_dir / "config.toml").write_text(config_toml, encoding="utf-8")
 
-    # 2. Use Ollama to decompose prompt into tasks
-    tasks_list = []
+    # 2. Use Ollama to decompose prompt into user stories
+    # Ralph-TUI requires a specific PRD schema with userStories
+    user_stories = []
     ollama_ok = await ollama.is_available()
     if ollama_ok:
         system_msg = (
             "You are a project planner. Given a user's project description, "
-            "break it down into concrete, actionable development tasks. "
-            "Return ONLY a JSON array of objects with 'id' (integer), "
-            "'title' (short), 'description' (detailed), 'priority' "
-            "(high/medium/low), and 'dependencies' (array of task ids). "
-            "Return 4-10 tasks. Return ONLY valid JSON, no markdown."
+            "break it down into concrete, actionable user stories. "
+            "Return ONLY a JSON array of objects with:\n"
+            '- "id": string like "US-001", "US-002", etc.\n'
+            '- "title": short title\n'
+            '- "description": detailed description starting with "As a user, I want..."\n'
+            '- "acceptanceCriteria": array of strings (criteria to consider it done)\n'
+            '- "priority": integer 1 (highest) to 5 (lowest)\n'
+            '- "dependsOn": array of story id strings this depends on, e.g. ["US-001"]\n'
+            "Return 4-10 user stories. Return ONLY valid JSON, no markdown."
         )
         raw = await ollama.chat(req.model, [
             {"role": "system", "content": system_msg},
@@ -624,51 +629,56 @@ headless = true
             # Extract JSON array from response (may have markdown fences)
             json_match = _re.search(r"\[.*\]", raw, _re.DOTALL)
             if json_match:
-                tasks_list = json.loads(json_match.group())
+                user_stories = json.loads(json_match.group())
         except (json.JSONDecodeError, AttributeError):
-            logger.warning("Failed to parse Ollama task response, using default task")
+            logger.warning("Failed to parse Ollama task response, using default story")
 
-    if not tasks_list:
-        tasks_list = [
+    if not user_stories:
+        user_stories = [
             {
-                "id": 1,
+                "id": "US-001",
                 "title": "Implement project",
-                "description": req.prompt,
-                "status": "pending",
-                "priority": "high",
-                "dependencies": [],
+                "description": f"As a developer, I want to {req.prompt}",
+                "acceptanceCriteria": ["Feature is implemented and working"],
+                "priority": 1,
+                "passes": False,
+                "dependsOn": [],
             }
         ]
 
-    # Ensure all tasks have required fields
-    for t in tasks_list:
-        t.setdefault("status", "pending")
-        t.setdefault("priority", "medium")
-        t.setdefault("dependencies", [])
-        t.setdefault("description", "")
+    # Ensure all stories have the required ralph-tui fields
+    for i, s in enumerate(user_stories):
+        s.setdefault("id", f"US-{i+1:03d}")
+        s.setdefault("title", "Untitled story")
+        s.setdefault("description", "")
+        s.setdefault("acceptanceCriteria", [])
+        s.setdefault("priority", i + 1)
+        s.setdefault("passes", False)
+        s.setdefault("dependsOn", [])
+        # Ensure types are correct
+        if isinstance(s["priority"], str):
+            prio_map = {"high": 1, "medium": 2, "low": 3}
+            s["priority"] = prio_map.get(s["priority"].lower(), 2)
+        if isinstance(s["acceptanceCriteria"], str):
+            s["acceptanceCriteria"] = [s["acceptanceCriteria"]]
 
-    # 3. Save tasks.json in multiple locations for compatibility
-    tasks_data = {"tasks": tasks_list}
-    tasks_json = json.dumps(tasks_data, indent=2, ensure_ascii=False)
-
-    # Primary: tasks/tasks.json
-    tasks_dir = project_path / "tasks"
-    tasks_dir.mkdir(exist_ok=True)
-    (tasks_dir / "tasks.json").write_text(tasks_json, encoding="utf-8")
-
-    # Also in .ralph-tui/tasks.json for ralph-tui compatibility
-    (ralph_dir / "tasks.json").write_text(tasks_json, encoding="utf-8")
-
-    # 4. Save prd.json
+    # 3. Build the PRD in ralph-tui's expected schema
+    branch_name = f"feature/{req.name}"
     prd_data = {
         "name": req.name,
-        "description": req.prompt,
-        "model": req.model,
-        "tasks": tasks_list,
+        "branchName": branch_name,
+        "userStories": user_stories,
     }
-    (project_path / "prd.json").write_text(
-        json.dumps(prd_data, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
+    prd_json = json.dumps(prd_data, indent=2, ensure_ascii=False)
+
+    # Save to tasks/tasks.json (what --prd points to)
+    tasks_dir = project_path / "tasks"
+    tasks_dir.mkdir(exist_ok=True)
+    (tasks_dir / "tasks.json").write_text(prd_json, encoding="utf-8")
+
+    # Also in .ralph-tui/tasks.json and prd.json for compatibility
+    (ralph_dir / "tasks.json").write_text(prd_json, encoding="utf-8")
+    (project_path / "prd.json").write_text(prd_json, encoding="utf-8")
 
     # 5. Launch Ralph-TUI if available
     launched = False
@@ -688,13 +698,13 @@ headless = true
             log_mgr.watch_file(req.name, log_file)
 
     return ApiResponse(
-        message=f"Project '{req.name}' created with {len(tasks_list)} tasks"
+        message=f"Project '{req.name}' created with {len(user_stories)} user stories"
                 + (f" and launched (PID: {pid})" if launched else ""),
         data={
             "name": req.name,
             "path": str(project_path),
-            "task_count": len(tasks_list),
-            "tasks": tasks_list,
+            "task_count": len(user_stories),
+            "tasks": user_stories,
             "launched": launched,
             "pid": pid,
         },
