@@ -668,6 +668,44 @@ body {
 
 .chat-input::placeholder { color: var(--text-faint); }
 
+/* Chat action buttons (mic, search) */
+.chat-action-btn {
+    color: var(--text-muted) !important;
+    min-width: 32px !important;
+    height: 32px !important;
+    padding: 0 !important;
+    font-size: 16px;
+    border-radius: var(--radius-md) !important;
+    transition: all var(--duration) var(--ease);
+    position: relative;
+}
+
+.chat-action-btn:hover {
+    color: var(--text-primary) !important;
+    background: var(--bg-hover) !important;
+}
+
+.chat-action-btn.active {
+    color: var(--error) !important;
+    background: var(--error-subtle) !important;
+    animation: pulse-mic 1.5s ease infinite;
+}
+
+.chat-action-btn.loading {
+    pointer-events: none;
+    opacity: 0.7;
+}
+
+.chat-action-btn .spinner {
+    width: 14px;
+    height: 14px;
+}
+
+@keyframes pulse-mic {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.3); }
+    50% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+}
+
 .chat-send-btn {
     width: 36px;
     height: 36px;

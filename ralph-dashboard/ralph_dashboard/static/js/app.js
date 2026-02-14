@@ -67,10 +67,9 @@ const App = {
             });
         });
 
-        // Preload speech synthesis voices
-        if ('speechSynthesis' in window) {
-            speechSynthesis.getVoices();
-        }
+        // Initialize TTS voices and speech recognition
+        Chat.initVoices();
+        Chat.initSpeechRecognition();
     },
 
     switchMode(mode) {

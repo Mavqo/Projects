@@ -194,6 +194,7 @@ def _count_tasks(project_path: Path) -> tuple[int, int]:
 
 def build_run_command(
     project_name: str,
+    project_path: Path | None = None,
     max_iterations: int = 50,
     headless: bool = False,
     model: str | None = None,
@@ -203,12 +204,26 @@ def build_run_command(
 
     Note: We run from the project directory (cwd), so ralph-tui should
     pick up .ralph-tui/config.toml automatically. We also pass
-    --tracker json explicitly to override any defaults.
+    --tracker json explicitly to override any defaults and --prd
+    to point at the tasks file so the json tracker finds them.
     """
     cmd = [find_ralph_tui() or "ralph-tui", "run"]
     cmd.extend(["--project", project_name])
     cmd.extend(["--max-iterations", str(max_iterations)])
     cmd.extend(["--tracker", "json"])
+
+    # Pass --prd so the json tracker finds the tasks file
+    if project_path:
+        prd_candidates = [
+            project_path / "tasks" / "tasks.json",
+            project_path / ".ralph-tui" / "tasks.json",
+            project_path / "prd.json",
+        ]
+        for prd_file in prd_candidates:
+            if prd_file.exists():
+                cmd.extend(["--prd", str(prd_file)])
+                break
+
     if headless:
         cmd.append("--headless")
     if model:

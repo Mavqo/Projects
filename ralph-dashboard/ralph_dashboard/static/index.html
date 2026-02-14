@@ -42,7 +42,7 @@
                 <div class="sidebar-section">
                     <div class="sidebar-section-title">Modello</div>
                     <select class="form-input" id="chat-model-select" style="font-size: 12px;">
-                        <option value="qwen2.5-coder:7b">qwen2.5-coder:7b</option>
+                        <option value="qwen2.5-coder:7b">Forge (Prompt / Coding)</option>
                     </select>
                 </div>
                 <div class="sidebar-section">
@@ -93,7 +93,10 @@
                                       placeholder="Scrivi un messaggio..."
                                       onkeydown="Chat.handleKey(event)"
                                       oninput="Chat.autoResize(this)"></textarea>
-                            <button class="btn btn-icon" onclick="Chat.searchWeb()" title="Cerca sul web" style="color:var(--text-muted);min-width:32px;height:32px;padding:0;">
+                            <button class="btn btn-icon chat-action-btn" id="chat-mic-btn" onclick="Chat.toggleMic()" title="Dettatura vocale">
+                                &#127908;
+                            </button>
+                            <button class="btn btn-icon chat-action-btn" id="chat-search-btn" onclick="Chat.searchWeb()" title="Cerca sul web">
                                 &#128269;
                             </button>
                             <button class="chat-send-btn" id="chat-send-btn" onclick="Chat.send()">

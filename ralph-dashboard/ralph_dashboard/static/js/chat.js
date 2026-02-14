@@ -1,8 +1,15 @@
 /**
  * Ralph Dashboard - Chat Module
  * Direct chat with local Ollama models via WebSocket streaming.
- * Features: persistence, text-to-speech, web search.
+ * Features: persistence, text-to-speech, speech-to-text, web search.
  */
+
+const MODEL_ALIASES = {
+    'qwen2.5-coder:7b': { alias: 'Forge', desc: 'Prompt / Coding' },
+    'mistral:7b': { alias: 'Faro', desc: 'Reasoning / Workflow' },
+    'gemma:7b': { alias: 'Radar', desc: 'Ricerca rapida / QA' },
+    'molbal/cra-v1-guided-7b:latest': { alias: 'Musa', desc: 'Creativo / Idee' },
+};
 
 const Chat = {
     _messages: [],
@@ -12,10 +19,19 @@ const Chat = {
     _currentContent: '',
     _conversationId: null,
     _ttsUtterance: null,
+    _voices: [],
+    _recognition: null,
+    _recognizing: false,
 
     getModel() {
         const sel = document.getElementById('chat-model-select');
         return sel ? sel.value : 'qwen2.5-coder:7b';
+    },
+
+    getModelAlias(modelName) {
+        const name = modelName || this.getModel();
+        const entry = MODEL_ALIASES[name];
+        return entry ? entry.alias : name;
     },
 
     handleKey(event) {
@@ -28,6 +44,88 @@ const Chat = {
     autoResize(el) {
         el.style.height = 'auto';
         el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+    },
+
+    // --- Voice Init ---
+
+    initVoices() {
+        if (!('speechSynthesis' in window)) return;
+        const loadVoices = () => {
+            this._voices = speechSynthesis.getVoices();
+        };
+        loadVoices();
+        if (speechSynthesis.onvoiceschanged !== undefined) {
+            speechSynthesis.onvoiceschanged = loadVoices;
+        }
+    },
+
+    initSpeechRecognition() {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) return;
+
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'it-IT';
+        recognition.interimResults = true;
+        recognition.continuous = false;
+        recognition.maxAlternatives = 1;
+
+        recognition.onstart = () => {
+            this._recognizing = true;
+            this._updateMicButton(true);
+        };
+
+        recognition.onresult = (event) => {
+            const input = document.getElementById('chat-input');
+            if (!input) return;
+            let transcript = '';
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                transcript += event.results[i][0].transcript;
+            }
+            // If final result, set value; if interim, show preview
+            if (event.results[event.results.length - 1].isFinal) {
+                input.value = (input.value ? input.value + ' ' : '') + transcript;
+            }
+            this.autoResize(input);
+        };
+
+        recognition.onerror = (event) => {
+            if (event.error !== 'no-speech' && event.error !== 'aborted') {
+                App.showToast(`Errore microfono: ${event.error}`, 'warning');
+            }
+            this._recognizing = false;
+            this._updateMicButton(false);
+        };
+
+        recognition.onend = () => {
+            this._recognizing = false;
+            this._updateMicButton(false);
+        };
+
+        this._recognition = recognition;
+    },
+
+    toggleMic() {
+        if (!this._recognition) {
+            App.showToast('Riconoscimento vocale non supportato dal browser', 'warning');
+            return;
+        }
+        if (this._recognizing) {
+            this._recognition.stop();
+        } else {
+            this._recognition.start();
+        }
+    },
+
+    _updateMicButton(active) {
+        const btn = document.getElementById('chat-mic-btn');
+        if (!btn) return;
+        if (active) {
+            btn.classList.add('active');
+            btn.title = 'Stop dettatura';
+        } else {
+            btn.classList.remove('active');
+            btn.title = 'Dettatura vocale';
+        }
     },
 
     // --- Conversation Management ---
@@ -238,6 +336,9 @@ const Chat = {
             return;
         }
 
+        // Show search button loading state
+        this._setSearchLoading(true);
+
         // Clear welcome if present
         const container = document.getElementById('chat-messages');
         const welcome = container?.querySelector('.chat-welcome');
@@ -288,10 +389,26 @@ const Chat = {
 
         } catch (e) {
             searchDiv.innerHTML = `<div style="color:var(--error);">Errore ricerca: ${this._escapeHtml(e.message)}</div>`;
+        } finally {
+            this._setSearchLoading(false);
         }
     },
 
     _lastSearchResults: null,
+
+    _setSearchLoading(loading) {
+        const btn = document.getElementById('chat-search-btn');
+        if (!btn) return;
+        if (loading) {
+            btn.classList.add('loading');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner spinner-sm"></span>';
+        } else {
+            btn.classList.remove('loading');
+            btn.disabled = false;
+            btn.innerHTML = '&#128269;';
+        }
+    },
 
     addSearchToContext() {
         if (!this._lastSearchResults?.length) return;
@@ -321,15 +438,27 @@ const Chat = {
             return;
         }
 
-        const utterance = new SpeechSynthesisUtterance(text);
+        // Clean text for speech: remove code blocks, URLs, markdown
+        const cleanText = text
+            .replace(/```[\s\S]*?```/g, ' codice omesso ')
+            .replace(/`[^`]+`/g, '')
+            .replace(/https?:\/\/\S+/g, '')
+            .replace(/[#*_~\[\]]/g, '')
+            .trim();
+
+        if (!cleanText) return;
+
+        const utterance = new SpeechSynthesisUtterance(cleanText);
         utterance.lang = 'it-IT';
         utterance.rate = 1.0;
         utterance.pitch = 1.0;
 
         // Try to find an Italian voice
-        const voices = speechSynthesis.getVoices();
+        const voices = this._voices.length ? this._voices : speechSynthesis.getVoices();
         const itVoice = voices.find(v => v.lang.startsWith('it'));
-        if (itVoice) utterance.voice = itVoice;
+        if (itVoice) {
+            utterance.voice = itVoice;
+        }
 
         this._ttsUtterance = utterance;
         speechSynthesis.speak(utterance);
@@ -352,7 +481,7 @@ const Chat = {
 
         const label = document.createElement('div');
         label.className = 'chat-msg-label';
-        label.textContent = role === 'user' ? 'Tu' : this.getModel();
+        label.textContent = role === 'user' ? 'Tu' : this.getModelAlias();
 
         const body = document.createElement('div');
         body.className = 'chat-msg-body';
@@ -429,9 +558,13 @@ const Chat = {
 
             [chatSelect, projectSelect].forEach(sel => {
                 if (!sel || !models.length) return;
-                sel.innerHTML = models.map(m =>
-                    `<option value="${m.name}">${m.name}</option>`
-                ).join('');
+                sel.innerHTML = models.map(m => {
+                    const entry = MODEL_ALIASES[m.name];
+                    const displayName = entry
+                        ? `${entry.alias} (${entry.desc})`
+                        : m.name;
+                    return `<option value="${m.name}">${displayName}</option>`;
+                }).join('');
             });
         } catch (e) {
             console.warn('Failed to load Ollama models:', e);

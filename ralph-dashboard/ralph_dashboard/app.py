@@ -257,6 +257,7 @@ async def launch_project(name: str, options: LaunchOptions | None = None):
     # Ralph-TUI's own TUI interface cannot work inside a subprocess pipe
     cmd = build_run_command(
         project_name=name,
+        project_path=project_path,
         max_iterations=opts.max_iterations,
         headless=True,
         model=opts.model,
@@ -675,6 +676,7 @@ headless = true
     if is_ralph_tui_available():
         cmd = build_run_command(
             project_name=req.name,
+            project_path=project_path,
             max_iterations=req.max_iterations,
             headless=True,
             model=req.model,
